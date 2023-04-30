@@ -10,11 +10,11 @@ Using this rich data source, Nocturne contains a wide range of scenarios whose s
   <img src="https://user-images.githubusercontent.com/33672752/174244860-65865e95-0592-4279-ab5d-f40842092cc7.gif" width="250" height="250"/>
   <img src="https://user-images.githubusercontent.com/33672752/174244327-51f98409-4afd-424e-88f5-29892e89d796.gif" width="250" height="250"/>
 </p> -->
-![Intersection Scene with Obscured View](./docs/readme_files/git_intersection_combined.gif)
+![Intersection Scene with Obscured View](https://github.com/facebookresearch/nocturne/raw/main/docs/readme_files/git_intersection_combined.gif)
 
 Nocturne features a rich variety of scenes, ranging from parking lots, to merges, to roundabouts, to unsignalized intersections.
 
-![Intersection Scene with Obscured View](./docs/readme_files/nocturne_3_by_3_scenes.gif)
+![Intersection Scene with Obscured View](https://github.com/facebookresearch/nocturne/raw/main/docs/readme_files/nocturne_3_by_3_scenes.gif)
 
 More videos can be found [here](https://www.nathanlct.com/research/nocturne).
 

@@ -44,3 +44,6 @@ dataset/
 
 # configs
 configs.json
+
+# Static doc files
+!docs/source/_static/*
