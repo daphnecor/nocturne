@@ -1,15 +1,15 @@
 ---
-jupyter:
-  jupytext:
-    text_representation:
-      extension: .md
-      format_name: markdown
-      format_version: '1.3'
-      jupytext_version: 1.14.0
-  kernelspec:
-    display_name: nocturne-research
-    language: python
-    name: python3
+jupytext:
+  formats: ipynb,md:myst
+  text_representation:
+    extension: .md
+    format_name: myst
+    format_version: 0.13
+    jupytext_version: 1.14.5
+kernelspec:
+  display_name: nocturne-research
+  language: python
+  name: python3
 ---
 
 ## Nocturne concepts
@@ -18,8 +18,10 @@ This page introduces the most basic elements of nocturne. You can find further i
 
 _Last update: April 2023_
 
-```python
+```{code-cell} ipython3
 import numpy as np
+
+from nocturne import Simulation
 
 data_path = 'data/example_scenario.json'
 ```
@@ -30,6 +32,7 @@ data_path = 'data/example_scenario.json'
 - The state of the vehicle of focus is referred to as the ego state. Each vehicles observes the traffic scene from their own viewpoint and a visible state is constructed by parameterizing the view distance, head angle and cone radius of the driver. The action for each vehicle is a `(1, 3)` tuple with the acceleration, steering and head angle of the vehicle. 
 - The step method advances the simulation with a desired step size. By default, the dynamics of vehicles are driven by a kinematic bicycle model. If a vehicle is set to expert-controlled mode, its position, heading, and speed will be updated according to a trajectory created by a human expert.
 
++++
 
 ### Simulation
 
@@ -43,9 +46,7 @@ In Nocturne, a simulation discretizes an existing traffic scenario. At the momen
 
 We show an example of this using `example_scenario.json`, where our traffic data is extracted from the Waymo open motion dataset:
 
-```python
-from nocturne import Simulation
-
+```{code-cell} ipython3
 scenario_config = {
     'start_time': 0, # When to start the simulation
     'allow_non_vehicles': True, # Whether to include cyclists and pedestrians 
@@ -65,19 +66,19 @@ A simulation consists of a set of scenarios. A scenario is a snapshot of the tra
 
 Here is how to create a scenario object:
 
-```python
+```{code-cell} ipython3
 # Get traffic scenario at timepoint
 scenario = sim.getScenario()
 ```
 
 The `scenario` objects holds information we are interested in. Here are a couple of examples:
 
-```python
+```{code-cell} ipython3
 # The number of road objects in the scene
 len(scenario.getObjects())
 ```
 
-```python
+```{code-cell} ipython3
 # The road objects that moved at a particular timepoint
 objects_that_moved = scenario.getObjectsThatMoved()
 
@@ -85,21 +86,21 @@ print(f'Total # moving objects: {len(objects_that_moved)}\n')
 print(f'Object IDs of moving vehicles: \n {[obj.getID() for obj in objects_that_moved]} ')
 ```
 
-```python
+```{code-cell} ipython3
 # Number of road lines
 len(scenario.road_lines())
 ```
 
-```python
+```{code-cell} ipython3
 scenario.getVehicles()[:5]
 ```
 
-```python
+```{code-cell} ipython3
 # No cyclists in this scene
 scenario.getCyclists()
 ```
 
-```python
+```{code-cell} ipython3
 # Select all moving vehicles that move 
 moving_vehicles = [obj for obj in scenario.getVehicles() if obj in objects_that_moved]
 
@@ -120,7 +121,7 @@ The **ego state** is an array with features that describe the current vehicle. T
 - 8: current steering position
 - 9: current head angle
 
-```python
+```{code-cell} ipython3
 # Select an arbitrary vehicle
 ego_vehicle = moving_vehicles[0]
 
@@ -155,10 +156,11 @@ Calling `scenario.visible_state()` returns a dictionary with four matrices:
 <figcaption>The same scene, this time showing the view of the yellow car.</figcaption></center>
 </figure>
 
++++
 
 The shape of the visible state is a function of the maximum number of visible objects defined at initialization (traffic lights, stop signs, road objects, and road points) and whether we add padding. If `padding = True`, an array is of size `(max visible objects, # features)` is always constructed, even if there are no visible objects. Otherwise, if `padding = False` new entries are only created when objects are visible.
 
-```python
+```{code-cell} ipython3
 # Define viewing distance, radius and head angle
 view_distance = 80 
 view_angle = np.radians(120) 
@@ -177,33 +179,33 @@ visible_state = scenario.visible_state(
 visible_state.keys()
 ```
 
-```python
+```{code-cell} ipython3
 # There are no visible stop signs at this point
 visible_state['stop_signs'].T
 ```
 
-```python
+```{code-cell} ipython3
 # Traffic light states are filtered out in this version of Nocturne
 visible_state['traffic_lights']
 ```
 
-```python
+```{code-cell} ipython3
 # Max visible road points x 13 features
 visible_state['road_points'].shape
 ```
 
-```python
+```{code-cell} ipython3
 # Number of visible road objects x 13 features 
 visible_state['objects'].shape
 ```
 
-```python
+```{code-cell} ipython3
 visible_state_dim = sum([val.flatten().shape[0] for key, val in visible_state.items()])
 
 print(f'Dimension flattened visible state: {visible_state_dim}')
 ```
 
-```python
+```{code-cell} ipython3
 # We can also flatten the visible state
 # flattened has padding: if we miss an object --> zeros
 visible_state_flat = scenario.flattened_visible_state(
@@ -218,6 +220,7 @@ visible_state_flat.shape
 
 Note that `.flattened_visible_state()` has padding by default.
 
++++
 
 ### Step 
 
@@ -225,7 +228,7 @@ Note that `.flattened_visible_state()` has padding by default.
 
 In the Waymo dataset, the length of the expert data is 9 seconds, a step size of 0.1 is used to discretize each traffic scene. The first second is used as a warm-start, leaving the remaining 8 seconds (80 steps) for the simulation (Details in Section 3.3).
 
-```python
+```{code-cell} ipython3
 dt = 0.1
 
 # Step the simulation
@@ -259,12 +262,12 @@ where $(x_t, y_t)$ is the position of a vehicle at time $t$, $\theta_t$ is the v
 
 If we set a vehicle to be **expert-controlled** instead, it will follow the same path as the respective human driver. This means that when we call the `step(dt)` function, the vehicle's position, heading, and speed will be updated to match the next point in the recorded human trajectory.
 
-```python
+```{code-cell} ipython3
 # By default, all vehicles are not expert controlled
 ego_vehicle.expert_control
 ```
 
-```python
+```{code-cell} ipython3
 # Set a vehicle to be expert controlled:
 ego_vehicle.expert_control = True
 ```
@@ -288,6 +291,7 @@ for vehicle in vehicles:
         vehicle speed = expert speeds[vehicle_idx, time]
 ```
 
++++
 
 ### Action space
 
@@ -300,7 +304,7 @@ The experiments in the paper use:
 
 This is how you can access an expert action for a vehicle in Nocturne:
 
-```python
+```{code-cell} ipython3
 # Choose an arbitrary timepoint
 time = 5
 
@@ -308,16 +312,16 @@ time = 5
 scenario.expert_action(ego_vehicle, time)
 ```
 
-```python
+```{code-cell} ipython3
 type(scenario.expert_action(ego_vehicle, time))
 ```
 
-```python
+```{code-cell} ipython3
 # How did the vehicle's position change after taking this action?
 scenario.expert_pos_shift(ego_vehicle, time)
 ```
 
-```python
+```{code-cell} ipython3
 # How did the head angle change?
 scenario.expert_heading_shift(ego_vehicle, time)
 ```

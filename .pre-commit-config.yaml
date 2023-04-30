@@ -1,0 +1,20 @@
+repos:
+  - repo: https://github.com/mwouts/jupytext
+    rev: v1.14.0
+    hooks:
+      - id: jupytext
+        args: [--from, ipynb, --to, md:myst, --sync]
+  
+  - repo: https://github.com/nbQA-dev/nbQA
+    rev: 1.7.0
+    hooks:
+      - id: nbqa-pyupgrade
+        args: ["--py38-plus"]
+      - id: nbqa-isort
+        args: ["--float-to-top"]
+      - id: nbqa-flake8
+
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.6.1
+    hooks:
+      - id: nbstripout
