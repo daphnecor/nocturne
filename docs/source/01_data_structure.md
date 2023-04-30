@@ -1,15 +1,15 @@
 ---
-jupyter:
-  jupytext:
-    text_representation:
-      extension: .md
-      format_name: markdown
-      format_version: '1.3'
-      jupytext_version: 1.14.0
-  kernelspec:
-    display_name: nocturne-research
-    language: python
-    name: python3
+jupytext:
+  formats: ipynb,md:myst
+  text_representation:
+    extension: .md
+    format_name: myst
+    format_version: 0.13
+    jupytext_version: 1.14.5
+kernelspec:
+  display_name: nocturne-research
+  language: python
+  name: python3
 ---
 
 ## Data format of a traffic scene
@@ -18,11 +18,12 @@ This notebook dives into the data format used to create simulations in Nocturne.
 
 _Last update: April 2023_
 
-```python
+```{code-cell} ipython3
 import json
+
 import matplotlib.pyplot as plt
-import seaborn as sns
 import pandas as pd
+import seaborn as sns
 
 cmap = ['r', 'g', 'b', 'y', 'c'] 
 %config InlineBackend.figure_format = 'svg'
@@ -34,7 +35,7 @@ Traffic scenes are constructed by utilizing the Waymo Open Motion dataset. Thoug
 
 To load a traffic scene:
 
-```python
+```{code-cell} ipython3
 # Take an example scene
 data_path = 'data/example_scenario.json'
 
@@ -49,17 +50,17 @@ A traffic scene consists of:
 - `name`: the name of the traffic scenario.
 - `objects`: the road objects or moving vehicles in the scene.
 - `roads`: the road points in the scene, these are all the stationary objects.
-- `tl_states`: the states of the traffic lights, which are filtered out for now. 
+- `tl_states`: the states of the traffic lights, which are filtered out for now.
 
-```python
+```{code-cell} ipython3
 traffic_scene['tl_states']
 ```
 
-```python
+```{code-cell} ipython3
 traffic_scene['name']
 ```
 
-```python
+```{code-cell} ipython3
 pd.Series(
     [
         traffic_scene['objects'][idx]['type']
@@ -71,7 +72,7 @@ plt.title(f'Distribution of road objects in traffic scene. Total # objects: {len
 
 This traffic scenario only contains vehicles and pedestrians, some scenes have cyclists as well.
 
-```python
+```{code-cell} ipython3
 pd.Series(
     [
         traffic_scene['roads'][idx]['type']
@@ -85,7 +86,7 @@ plt.title(f'Distribution of road points in traffic scene. Total # points: {len(t
 
 This is a list of different road objects in the traffic scene. For each road object, we have information about its position, velocity, size, in which direction its heading, whether its a valid object, the type, and the final position of the vehicle.
 
-```python
+```{code-cell} ipython3
 # Take the first object
 idx = 0
 
@@ -93,43 +94,43 @@ idx = 0
 traffic_scene['objects'][idx].keys()
 ```
 
-```python
+```{code-cell} ipython3
 # Position contains the (x, y) coordinates for the vehicle at every time step
 print(json.dumps(traffic_scene['objects'][idx]['position'][:10], indent=4))
 ```
 
-```python
+```{code-cell} ipython3
 # Width and length together make the size of the object, and is used to see if there is a collision 
 traffic_scene['objects'][idx]['width'], traffic_scene['objects'][idx]['length'] 
 ```
 
 Heading is the direction in which the vehicle is pointing. Since the scene is constructed from an ego driver's view, there are timepoints when we don't have access to the heading of some vehicles. States that were not observed are given with `-10_000` to indicate steps that should be filtered out.
 
-```python
+```{code-cell} ipython3
 # Heading is the direction in which the vehicle is pointing 
 plt.plot(traffic_scene['objects'][idx]['heading']);
 plt.xlabel('Time step')
 plt.ylabel('Heading');
 ```
 
-```python
+```{code-cell} ipython3
 # Velocity shows the velocity in the x- and y- directions
 print(json.dumps(traffic_scene['objects'][idx]['velocity'][:10], indent=4))
 ```
 
-```python
+```{code-cell} ipython3
 # Valid indicates if the state of the vehicle was observed for each timepoint
 plt.xlabel('Time step')
 plt.ylabel('IS VALID');
 plt.plot(traffic_scene['objects'][idx]['valid'], '_', lw=5);
 ```
 
-```python
+```{code-cell} ipython3
 # Each object has a goalPosition, an (x, y) position within the scene
 traffic_scene['objects'][idx]['goalPosition']
 ```
 
-```python
+```{code-cell} ipython3
 # Finally, we have the type of the vehicle
 traffic_scene['objects'][idx]['type']
 ```
@@ -138,16 +139,16 @@ traffic_scene['objects'][idx]['type']
 
 Road points are static objects in the scene.
 
-```python
+```{code-cell} ipython3
 traffic_scene['roads'][idx].keys()
 ```
 
-```python
+```{code-cell} ipython3
 # This point represents the edge of a road
 traffic_scene['roads'][idx]['type']
 ```
 
-```python
+```{code-cell} ipython3
 # Geometry contains the (x, y) position(s) for a road point
 # Note that this will be a list for road lanes and edges but a single (x, y) tuple for stop signs and alike
 print(json.dumps(traffic_scene['roads'][idx]['geometry'][:10], indent=4));
