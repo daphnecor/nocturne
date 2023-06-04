@@ -1,7 +1,7 @@
 defaults:
   - override hydra/launcher: submitit_local
 
-### Data configurations ###
+# Data configurations
 data: 
   train_path: /scratch/dc4971/nocturne/data/formatted_json_v2_no_tl_train #TODO
   test_path: '/scratch/dc4971/nocturne/data/formatted_json_v2_no_tl_valid'
@@ -14,7 +14,7 @@ data:
   dt: 0.1
   state_normalization: 100
 
-### Traffic scene configurations ###
+# Traffic scene configurations
 scene:
   start_time: 0
   allow_non_vehicles: True
@@ -23,13 +23,12 @@ scene:
   sample_every_n: 1
   road_edge_first: False
 
-### Training settings ### 
-
+# Training settings
 experiment: nocturne-test # Name of wandb experiment (single run)
 lr: 3e-4 # Learning rate
 samples_per_epoch: 50_000 # Number of batch iterations per epoch
 batch_size: 512
-epochs: 5
+epochs: 20
 n_cpus: 0
 device: cuda
 actions_are_positions: False
@@ -38,11 +37,15 @@ seed: 0
 clip_value: 1
 
 # WANDB things
-wandb: False
+wandb: True
 wandb_project: nocturne
 wandb_group: imitation-learning-cluster 
 wandb_mode: online
 wandb_resume: allow
+
+# IMITATION learning: Evaluation settings
+num_eval_files: 100
+best_bc_model_path: /scratch/dc4971/nocturne/outputs/2023-06-04/10-29-58/train_logs/2023_06_04/model_20_epochs.pth
 
 # hydra:
 #   run:

@@ -22,7 +22,7 @@ with open('cfgs/config.yaml', 'r') as yaml_file:
 def main(args):
     #BASE_PATH = '/scratch/dc4971/nocturne/data'
     #valid_data_path = Path(f'{BASE_PATH}/formatted_json_v2_no_tl_valid')
-    valid_data_paths = list(Path(args.data.test_path).glob('tfrecord*.json'))[:10]
+    valid_data_paths = list(Path(args.data.test_path).glob('tfrecord*.json'))[:args.num_eval_files]
 
     scenario_cfg = {
         'start_time': args.scene.start_time,
@@ -44,10 +44,6 @@ def main(args):
         num_workers=0,
         collate_fn=simulation_collate_fn
     )
-
-    # TODO: automate this
-    # Load model
-    model_path = '/scratch/dc4971/nocturne/examples/imitation_learning/model_5_epochs.pth'
     
     # Get state space dimension
     state_dim = 35110
@@ -56,7 +52,7 @@ def main(args):
     # Note: doing it this way for now because torch.load() expects model.py 
     # to be in the same folder
     device = 'cpu'
-    model = torch.load(model_path).to(device)
+    model = torch.load(args.best_bc_model_path).to(device)
     model.eval()
 
     collision_rate_veh = np.zeros(len(valid_data_paths))
@@ -73,7 +69,6 @@ def main(args):
             sim_obj, scenario_cfg, num_stacked_states=5, model=model,
             )
 
-    # Print performance 
     print(f'Collision rates: \n (veh <> veh) {collision_rate_veh.mean() * 100:.2f} % \n (veh <> road objects) {collision_rate_road_edge.mean() * 100:.2f} % \n')
     print(f'Goal rates: \n Vehicles that reach their goal {goal_rates.mean() * 100:.2f} %')
 

@@ -220,7 +220,6 @@ def main(args):
             pickle.dump(filter, open(exp_dir / f"filter_{epoch+1}.pth", "wb"))
             print(f'\nSaved model at {model_path}')
 
-
     # # # # # END EPOCHS # # # # # 
     print('Done, exp dir is', exp_dir)
     print(f'Total training time: {time.time() - start:.3f} seconds')

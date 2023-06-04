@@ -72,8 +72,8 @@ class BehavioralCloningAgent(nn.Module):
         # Get distribution over every action in action types (acc, steering, head tilt)
         action_dists_in_state = [Categorical(logits=head(outputs)) for head in self.heads]
 
-        # Get action indices (here deterministic)
-        # Find indexes in actions grids whose values are the closest to the ground truth actions
+        # Get action indices: Find indexes in actions grids which values are 
+        # closest to the ground truth actions
         actions_idx = [dist.logits.argmax(axis=-1) if deterministic else dist.sample()
                        for dist in action_dists_in_state]
         
