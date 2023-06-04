@@ -76,7 +76,7 @@ def main(args):
     
     # # # # # # CREATE DATA LOADER # # # # # #
     dataset = WaymoDataset(
-        data_path=args.data.path,
+        data_path=args.data.train_path,
         file_limit=args.data.num_files,
         dataloader_config=dataloader_cfg,
         scenario_config=scenario_cfg,
@@ -109,10 +109,7 @@ def main(args):
         config=model_cfg,
         device=device,
     ).to(device)
-
     model.train()
-
-    print(state_dim)
 
     # Create optimizer
     optimizer = Adam(model.parameters(), lr=args.lr)
@@ -150,7 +147,7 @@ def main(args):
 
     start = time.time()
     
-    ##### Train loop #####
+    # # # # # # TRAIN LOOP # # # # # #
     for epoch in range(args.epochs):
         print(f'\nepoch {epoch+1}/{args.epochs}')
         n_samples = epoch * args.batch_size * (args.samples_per_epoch //
@@ -212,7 +209,7 @@ def main(args):
             if args.wandb:
                 wandb.log(metrics_dict)
 
-        ##### END OF BATCH #####
+        # # # # # # # # # # # # # # # # # # # # # # # #
 
         # Save model checkpoint
         if (epoch + 1) % 10 == 0 or epoch == args.epochs - 1:
@@ -224,7 +221,7 @@ def main(args):
             print(f'\nSaved model at {model_path}')
 
 
-    ##### END OF EPOCHS #####
+    # # # # # END EPOCHS # # # # # 
     print('Done, exp dir is', exp_dir)
     print(f'Total training time: {time.time() - start:.3f} seconds')
 

@@ -3,7 +3,8 @@ defaults:
 
 ### Data configurations ###
 data: 
-  path: /scratch/dc4971/nocturne/data/formatted_json_v2_no_tl_train #TODO
+  train_path: /scratch/dc4971/nocturne/data/formatted_json_v2_no_tl_train #TODO
+  test_path: '/scratch/dc4971/nocturne/data/formatted_json_v2_no_tl_valid'
   num_files: -1  # set to -1 for real training
   tmin: 0
   tmax: 90

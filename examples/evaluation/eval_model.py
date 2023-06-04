@@ -20,11 +20,9 @@ with open('cfgs/config.yaml', 'r') as yaml_file:
 
 @hydra.main(config_path="../../cfgs/imitation", config_name="config")
 def main(args):
-    """_summary_
-    """
-    BASE_PATH = '/scratch/dc4971/nocturne/data'
-    valid_data_path = Path(f'{BASE_PATH}/formatted_json_v2_no_tl_valid')
-    valid_data_paths = list(Path(valid_data_path).glob('tfrecord*.json'))[:10]
+    #BASE_PATH = '/scratch/dc4971/nocturne/data'
+    #valid_data_path = Path(f'{BASE_PATH}/formatted_json_v2_no_tl_valid')
+    valid_data_paths = list(Path(args.data.test_path).glob('tfrecord*.json'))[:10]
 
     scenario_cfg = {
         'start_time': args.scene.start_time,
@@ -47,6 +45,7 @@ def main(args):
         collate_fn=simulation_collate_fn
     )
 
+    # TODO: automate this
     # Load model
     model_path = '/scratch/dc4971/nocturne/examples/imitation_learning/model_5_epochs.pth'
     
