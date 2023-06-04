@@ -21,7 +21,7 @@ single_agent_mode: False
 # all goals are achievable within 90 steps
 episode_length: 80
 # how many files of the total dataset to use. -1 indicates to use all of them
-num_files: -1
+num_files: 10
 scenario_path:  ${oc.env:PROCESSED_TRAIN_NO_TL}
 dt: 0.1
 sims_per_step: 10

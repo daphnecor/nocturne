@@ -44,3 +44,18 @@ dataset/
 
 # configs
 configs.json
+
+# HPC
+*.ext3
+*.ext3.gz
+*.sif
+
+# venv
+venv/*
+
+# Ignore all data
+data/*
+*.json
+
+# Logs
+outputs/*

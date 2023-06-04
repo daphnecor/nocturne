@@ -1,42 +1,60 @@
 defaults:
   - override hydra/launcher: submitit_local
 
-experiment: test
-path: ${oc.env:PROCESSED_TRAIN_NO_TL}
-num_files: 1000
-n_cpus: 9
-lr: 3e-4
-samples_per_epoch: 50000
-max_visible_road_points: 500
+### Data configurations ###
+data: 
+  path: /scratch/dc4971/nocturne/data/formatted_json_v2_no_tl_train #TODO
+  num_files: -1  # set to -1 for real training
+  tmin: 0
+  tmax: 90
+  n_stacked_states: 5
+  view_dist: 80
+  view_angle: 3.14
+  dt: 0.1
+  state_normalization: 100
+
+### Traffic scene configurations ###
+scene:
+  start_time: 0
+  allow_non_vehicles: True
+  spawn_invalid_objects: True
+  max_visible_road_points: 500
+  sample_every_n: 1
+  road_edge_first: False
+
+### Training settings ### 
+
+experiment: nocturne-test # Name of wandb experiment (single run)
+lr: 3e-4 # Learning rate
+samples_per_epoch: 50_000 # Number of batch iterations per epoch
 batch_size: 512
-epochs: 700
+epochs: 5
+n_cpus: 0
 device: cuda
-n_stacked_states: 5
-view_dist: 80
-view_angle: 3.14
 actions_are_positions: False
-discrete: True
-seed: 0
+discrete: True # Actions are discrete
+seed: 0 
+clip_value: 1
 
 # WANDB things
-wandb: True
+wandb: False
 wandb_project: nocturne
-wandb_group: ${experiment}
+wandb_group: imitation-learning-cluster 
+wandb_mode: online
+wandb_resume: allow
 
-# tensorboard logs
-write_to_tensorboard: True
+# hydra:
+#   run:
+#     dir: /checkpoint/${oc.env:USER}/nocturne/test/${now:%Y.%m.%d}/${experiment}/${now:%H.%M.%S}/${hydra.job.override_dirname}
+#   sweep:
+#     dir: /checkpoint/${oc.env:USER}/nocturne/sweep/imitation/${now:%Y.%m.%d}/${experiment}/${now:%H.%M.%S}
+#     subdir: ${hydra.job.num}
+#   launcher:
+#     timeout_min: 2880
+#     cpus_per_task: 80
+#     gpus_per_node: 1
+#     tasks_per_node: 1
+#     mem_gb: 160
+#     nodes: 1
+#     submitit_folder: /checkpoint/${oc.env:USER}/nocturne/sweep/imitation/${now:%Y.%m.%d}/${experiment}/${now:%H.%M.%S}/.slurm
 
-hydra:
-  run:
-    dir: /checkpoint/${oc.env:USER}/nocturne/test/${now:%Y.%m.%d}/${experiment}/${now:%H.%M.%S}/${hydra.job.override_dirname}
-  sweep:
-    dir: /checkpoint/${oc.env:USER}/nocturne/sweep/imitation/${now:%Y.%m.%d}/${experiment}/${now:%H.%M.%S}
-    subdir: ${hydra.job.num}
-  launcher:
-    timeout_min: 2880
-    cpus_per_task: 80
-    gpus_per_node: 1
-    tasks_per_node: 1
-    mem_gb: 160
-    nodes: 1
-    submitit_folder: /checkpoint/${oc.env:USER}/nocturne/sweep/imitation/${now:%Y.%m.%d}/${experiment}/${now:%H.%M.%S}/.slurm

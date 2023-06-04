@@ -26,6 +26,7 @@ python -m sample_factory_examples.enjoy_custom_multi_env --algo=APPO \
 """
 import os
 import sys
+import pdb
 
 import hydra
 import numpy as np
@@ -37,6 +38,24 @@ from sample_factory.algorithms.appo.model_utils import get_obs_shape, EncoderBas
 from torch import nn
 
 from nocturne.envs.wrappers import create_env
+
+import os
+import sys
+
+class ForkedPdb(pdb.Pdb):
+    """A Pdb subclass that may be used
+    from a forked multiprocessing child
+
+    """
+    def interaction(self, *args, **kwargs):
+        _stdin = sys.stdin
+        try:
+            sys.stdin = open('/dev/stdin')
+            pdb.Pdb.interaction(self, *args, **kwargs)
+        finally:
+            sys.stdin = _stdin
+
+#os.environ["PYTHONBREAKPOINT"] = "0"
 
 
 class SampleFactoryEnv():
@@ -339,11 +358,13 @@ def main(cfg):
 
     # put it into a namespace so sample factory code runs correctly
     class Bunch(object):
-
         def __init__(self, adict):
             self.__dict__.update(adict)
 
     cfg = Bunch(cfg_dict)
+
+    breakpoint()
+
     status = run_algorithm(cfg)
     return status
 
