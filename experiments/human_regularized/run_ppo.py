@@ -3,6 +3,7 @@ import os
 import random
 import time
 from distutils.util import strtobool
+from dataclasses import dataclass, asdict
 
 import gym
 import numpy as np
@@ -13,72 +14,14 @@ from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
 import wandb
 #import pdb
+from constants import PPOExperimentConfig, NocturneConfig, WandBSettings, HumanPolicyConfig
 
 import yaml
 from base_env import BaseEnv
 import logging
 from imit_models import BehavioralCloningAgentJoint
 
-logging.basicConfig(level=logging.INFO)
-
-
-def parse_args():
-    # fmt: off
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--rl_env_cfg", type=str, default="experiments/human_regularized/rl_config.yaml",
-        help="settings for the nocturne environment.")
-    parser.add_argument("--lam", type=float, default=0,
-        help="coefficient of kl_div to human anchor policy")
-    parser.add_argument("--exp-name", type=str, default=os.path.basename(__file__).rstrip(".py"),
-        help="the name of this experiment")
-    parser.add_argument("--seed", type=int, default=1,
-        help="seed of the experiment")
-    parser.add_argument("--torch-deterministic", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
-        help="if toggled, `torch.backends.cudnn.deterministic=False`")
-    parser.add_argument("--cuda", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
-        help="if toggled, cuda will be enabled by default")
-    parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
-        help="if toggled, this experiment will be tracked with Weights and Biases")
-    parser.add_argument("--wandb-project-name", type=str, default="human_regularized_rl",
-        help="the wandb's project name")
-    parser.add_argument("--wandb-entity", type=str, default=None,
-        help="the entity (team) of wandb's project")
-    # Algorithm specific arguments
-    parser.add_argument("--env-id", type=str, default="Nocturne-v0",
-        help="the id of the environment")
-    parser.add_argument("--total-iters", type=int, default=4, #1000, #50_000,
-        help="total iterations of the experiments")
-    parser.add_argument("--learning-rate", type=float, default=2.5e-4,
-        help="the learning rate of the optimizer")
-    parser.add_argument("--num-steps", type=int, default=80,
-        help="the number of steps to run in each environment per policy rollout")
-    parser.add_argument("--anneal-lr", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
-        help="Toggle learning rate annealing for policy and value networks")
-    parser.add_argument("--gamma", type=float, default=0.99,
-        help="the discount factor gamma")
-    parser.add_argument("--gae-lambda", type=float, default=0.95,
-        help="the lambda for the general advantage estimation")
-    parser.add_argument("--num-minibatches", type=int, default=4,
-        help="the number of mini-batches")
-    parser.add_argument("--update-epochs", type=int, default=4,
-        help="the K epochs to update the policy")
-    parser.add_argument("--norm-adv", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
-        help="Toggles advantages normalization")
-    parser.add_argument("--clip-coef", type=float, default=0.2,
-        help="the surrogate clipping coefficient")
-    parser.add_argument("--clip-vloss", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
-        help="Toggles whether or not to use a clipped loss for the value function, as per the paper.")
-    parser.add_argument("--ent-coef", type=float, default=0.01,
-        help="coefficient of the entropy")
-    parser.add_argument("--vf-coef", type=float, default=0.5,
-        help="coefficient of the value function")
-    parser.add_argument("--max-grad-norm", type=float, default=0.5,
-        help="the maximum norm for the gradient clipping")
-    parser.add_argument("--target-kl", type=float, default=None,
-        help="the target KL divergence threshold")
-    args = parser.parse_args()
-    # fmt: on
-    return args
+logging.basicConfig(level=logging.CRITICAL)
 
 
 def make_env(config_path, seed, run_name):
@@ -186,35 +129,40 @@ class RolloutBuffer:
 
 
 if __name__ == "__main__":
-    args = parse_args()
-    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}"
-    if args.track:
+
+    args_exp = PPOExperimentConfig()
+    args_wandb = WandBSettings()
+    args_env = NocturneConfig()
+    args_human_pol = HumanPolicyConfig()
+
+    run_name = f"{args_env.env_id}__{args_wandb.exp_name}"
+
+    if args_wandb.track:
         wandb.init(
-            project=args.wandb_project_name,
-            entity=args.wandb_entity,
-            sync_tensorboard=True,
-            config=vars(args),
-            group="nocturne",
-            name=run_name,
-            save_code=True,
+            project = args_wandb.project_name,
+            sync_tensorboard = True,
+            config = asdict(args_wandb),
+            group = "nocturne",
+            name = run_name,
         )
+
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
         "hyperparameters",
         "|param|value|\n|-|-|\n%s"
-        % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
+        % ("\n".join([f"|{key}|{value}|" for key, value in vars(args_exp).items()])),
     )
 
     # TRY NOT TO MODIFY: seeding
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    torch.backends.cudnn.deterministic = args.torch_deterministic
+    random.seed(args_exp.seed)
+    np.random.seed(args_exp.seed)
+    torch.manual_seed(args_exp.seed)
+    torch.backends.cudnn.deterministic = args_exp.torch_deterministic
 
-    device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() and args_exp.cuda else "cpu")
 
     # Env setup
-    env = make_env(args.rl_env_cfg, args.seed, run_name)
+    env = make_env(args_env.nocturne_rl_cfg, args_exp.seed, run_name)
 
     # State and action space dimension
     observation_space_dim = env.observation_space.shape[0]
@@ -222,35 +170,24 @@ if __name__ == "__main__":
 
     # Create ppo agent
     agent = Agent(env, observation_space_dim, action_space_dim).to(device)
-    optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
+    optimizer = optim.Adam(agent.parameters(), lr=args_exp.learning_rate, eps=1e-5)
     kl_loss = nn.KLDivLoss(reduction="batchmean")
 
-    # LOAD HUMAN ANCHOR POLICY
-    human_policy_cfg = {
-        "batch_size": 1,
-        "hidden_layers": [1025, 256, 128],
-        "actions_discretizations": [
-            15,
-            42,
-        ],
-        "actions_bounds": [
-            [-6, 6],
-            [-0.7, 0.7],
-        ],
-    }
+    # Load human anchor policy
     human_anchor_policy = BehavioralCloningAgentJoint(
         num_inputs=observation_space_dim,
-        config=human_policy_cfg,
+        config=args_human_pol,
         device=device,
     ).to(device)
+    
     human_anchor_policy.load_state_dict(
-        torch.load("experiments/human_regularized/human_anchor_policy_AS.pth")
+        torch.load(args_human_pol.pretrained_model_path)
     )
 
     # Setup
     global_step = 0 
     start_time = time.time()
-    num_updates = args.total_iters
+    num_updates = args_exp.total_iters
 
     for update in range(1, num_updates + 1):  # For a number of iterations
         # We have a multi-agent setup, where the number of agents varies per traffic scene
@@ -260,7 +197,7 @@ if __name__ == "__main__":
         num_agents = len(controlled_agents)
         buffer = RolloutBuffer(
             controlled_agents,
-            args.num_steps,
+            args_exp.num_steps,
             observation_space_dim,
             action_space_dim,
             device,
@@ -276,15 +213,15 @@ if __name__ == "__main__":
         writer.add_scalar("charts/num_agents_in_scene", num_agents, global_step)
 
         # Annealing the rate if instructed to do so
-        if args.anneal_lr:
-            frac = 1.0 - (update - 1.0) / num_updates
-            lrnow = frac * args.learning_rate
+        if args_exp.anneal_lr:
+            frac = 1.0 - (update - 1.0) / args_exp.total_iters
+            lrnow = frac * args_exp.learning_rate
             optimizer.param_groups[0]["lr"] = lrnow
 
         # Rollout phase
         logging.info("--- POLICY ROLLOUTS --- \n")
 
-        for step in range(0, args.num_steps):
+        for step in range(0, args_exp.num_steps):
             logging.debug(f"Step: {step}")
 
             global_step += 1
@@ -337,15 +274,6 @@ if __name__ == "__main__":
             logging.debug(f"step reward: {sum(reward_dict.values()):.2f}")
             logging.debug(f"cumsum reward: {current_ep_reward:.2f}")
 
-            # writer.add_scalar(
-            #     "charts/cum_step_return_overall", current_ep_reward, global_step
-            # )
-            # writer.add_scalar(
-            #     "charts/cum_step_return_norm",
-            #     current_ep_reward / num_agents,
-            #     global_step,
-            # )
-
             # Update done agents
             for agent_id in next_obs_dict.keys():
                 if next_done_dict[agent_id]:
@@ -390,20 +318,20 @@ if __name__ == "__main__":
 
         with torch.no_grad():
             next_value = agent.get_value(next_obs).reshape(1, -1)
-            advantages = torch.zeros((args.num_steps, num_agents)).to(device)
+            advantages = torch.zeros((args_exp.num_steps, num_agents)).to(device)
             lastgaelam = 0
-            for t in reversed(range(args.num_steps)):
-                if t == args.num_steps - 1:
+            for t in reversed(range(args_exp.num_steps)):
+                if t == args_exp.num_steps - 1:
                     nextnonterminal = 1.0 - next_done
                     nextvalues = next_value
                 else:
                     nextnonterminal = 1.0 - dones[t + 1]
                     nextvalues = values[t + 1]
                 delta = (
-                    rewards[t] + args.gamma * nextvalues * nextnonterminal - values[t]
+                    rewards[t] + args_exp.gamma * nextvalues * nextnonterminal - values[t]
                 )
                 advantages[t] = lastgaelam = (
-                    delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam
+                    delta + args_exp.gamma * args_exp.gae_lambda * nextnonterminal * lastgaelam
                 )
             returns = advantages + values
 
@@ -431,9 +359,13 @@ if __name__ == "__main__":
         clipfracs = []
         batch_size = len(valid_b_inds)
         minibatch_size = batch_size // num_agents
-        for epoch in range(args.update_epochs):
+        for epoch in range(args_exp.update_epochs):
             logging.info(f"Epoch: {epoch}")
-            np.random.shuffle(valid_b_inds)
+            
+            # Shuffle batch indices 
+            indices = torch.randperm(valid_b_inds.size(0))
+            valid_b_inds = valid_b_inds[indices]
+
             for start in range(0, batch_size, minibatch_size):
                 end = start + minibatch_size
                 mb_inds = valid_b_inds[start:end]
@@ -461,11 +393,11 @@ if __name__ == "__main__":
                     old_approx_kl = (-logratio).mean()
                     approx_kl = ((ratio - 1) - logratio).mean()
                     clipfracs += [
-                        ((ratio - 1.0).abs() > args.clip_coef).float().mean().item()
+                        ((ratio - 1.0).abs() > args_exp.clip_coef).float().mean().item()
                     ]
 
                 mb_advantages = b_advantages[mb_inds]
-                if args.norm_adv:
+                if args_exp.norm_adv:
                     mb_advantages = (mb_advantages - mb_advantages.mean()) / (
                         mb_advantages.std() + 1e-8
                     )
@@ -473,18 +405,18 @@ if __name__ == "__main__":
                 # Policy loss
                 pg_loss1 = -mb_advantages * ratio
                 pg_loss2 = -mb_advantages * torch.clamp(
-                    ratio, 1 - args.clip_coef, 1 + args.clip_coef
+                    ratio, 1 - args_exp.clip_coef, 1 + args_exp.clip_coef
                 )
                 pg_loss = torch.max(pg_loss1, pg_loss2).mean()
 
                 # Value loss
                 newvalue = newvalue.view(-1)
-                if args.clip_vloss:
+                if args_exp.clip_vloss:
                     v_loss_unclipped = (newvalue - b_returns[mb_inds]) ** 2
                     v_clipped = b_values[mb_inds] + torch.clamp(
                         newvalue - b_values[mb_inds],
-                        -args.clip_coef,
-                        args.clip_coef,
+                        -args_exp.clip_coef,
+                        args_exp.clip_coef,
                     )
                     v_loss_clipped = (v_clipped - b_returns[mb_inds]) ** 2
                     v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
@@ -496,21 +428,20 @@ if __name__ == "__main__":
 
                 loss = (
                     pg_loss
-                    - args.ent_coef * entropy_loss
-                    + v_loss * args.vf_coef
-                    - args.lam * kl_div
+                    - args_exp.ent_coef * entropy_loss
+                    + args_exp.vf_coef * v_loss
+                    - args_exp.lam * kl_div
                 )
 
-                # logging.info(f'policy loss: {pg_loss:.3f} | val loss: {v_loss * args.vf_coef:.3f}\n')
                 logging.info(f"L = {loss}")
 
                 optimizer.zero_grad()
                 loss.backward()
-                nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
+                nn.utils.clip_grad_norm_(agent.parameters(), args_exp.max_grad_norm)
                 optimizer.step()
 
-            if args.target_kl is not None:
-                if approx_kl > args.target_kl:
+            if args_exp.target_kl is not None:
+                if approx_kl > args_exp.target_kl:
                     break
 
         # Clear buffer
@@ -530,8 +461,9 @@ if __name__ == "__main__":
         writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
         writer.add_scalar("losses/policy_loss", pg_loss.item(), global_step)
         writer.add_scalar(
-            "losses/weighted_entropy", args.ent_coef * entropy_loss.item(), global_step
+            "losses/entropy", entropy_loss.item(), global_step
         )
+        writer.add_scalar("charts/mean_advantage", b_advantages.mean())
         writer.add_scalar("losses/old_approx_kl", old_approx_kl.item(), global_step)
         writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
         writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)

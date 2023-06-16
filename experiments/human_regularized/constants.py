@@ -1,39 +1,33 @@
+import os
 from pathlib import Path
 from dataclasses import dataclass
 
+
 @dataclass
 class PPOExperimentConfig:
-    experiment_name: str
-    num_epochs: int
-    num_steps_per_epoch: int
-    batch_size: int
-    env_name: str
-    ppo: "PPOConfig"
-    data: "DataSettings"
-    wandb: "WandBSettings"
-    # Additional experiment-specific settings
+    seed: int = 1                     # seed of the experiment
+    torch_deterministic = True        # if toggled, `torch.backends.cudnn.deterministic=False`
+    cuda = True                       # if toggled, cuda will be enabled by default
+    total_iters: int = 1000           # total iterations of the experiments
+    num_steps: int = 80               # the number of steps to run in each environment per policy rollout
+    learning_rate: float = 2.5e-4     # the learning rate of the optimizer 
+    anneal_lr: float = True           # toggle learning rate annealing for policy and value networks
+    gamma: float = 0.99               # the discount factor gamma
+    gae_lambda: float = 0.95          # the lambda for the general advantage estimation
+    update_epochs: int = 4            # the K epochs to update the policy
+    norm_adv: bool = True             # toggles advantages normalization
+    clip_coef: float = 0.2            # the surrogate clipping coefficient
+    clip_vloss: bool = True           # toggles whether or not to use a clipped loss for the value function, as per the paper.
+    ent_coef: float = 0.01            # coefficient of the entropy
+    vf_coef: float = 0.5              # coefficient of the value function
+    max_grad_norm: float = 0.5        # the maximum norm for the gradient clipping
+    lam: float = 0                    # coefficient of kl_div to human anchor policy
+    target_kl: float = None           # the target KL divergence threshold
 
 @dataclass
-class PPOConfig:
-    env_name: str = 'Nocturne-v0'
-    has_cont_action_space: bool = False
-    max_ep_len: int = 80                    # max timesteps in one episode
-    max_iters: int = 300                    # break training loop if timeteps > max_training_timesteps
-    update_timestep: int = max_ep_len * 4
-    gamma: float = 0.99
-    K_epochs: int = 40                      # update policy for K epochs (optimization epochs)
-    eps_clip: float = 0.2                   # clip parameter for PPO
-    value_loss_coef: float = 0.1            # discount factor
-    lr_actor: float = 0.0003                # learning rate for actor network
-    lr_critic: float = 0.001                # learning rate for critic network
-    random_seed: int = 0                    # set random seed if required (0 = no random seed)
-    entropy_coef: float = 0.3               #TODO
-    max_grad_norm: float = 1                #TODO
-
-@dataclass
-class DataSettings:
-    base_dir: str = None
-    nocturne_env_dir = Path('/Users/Daphne/Github Repositories/nocturne-research/cfgs/config.yaml')
+class NocturneConfig:
+    env_id: str = 'Nocturne-v0'
+    nocturne_rl_cfg: str = 'experiments/human_regularized/rl_config.yaml'
     train_data_dir: str = None
     valid_data_dir: str = None
     test_split: float = None
@@ -41,13 +35,16 @@ class DataSettings:
 @dataclass
 class HumanPolicyConfig:
     batch_size: int = 1
-    hidden_layers = [1025, 256, 128],  # Model used in paper
-    actions_discretizations = [15, 42],
-    actions_bounds = [[-6, 6], [-0.7, 0.7]],  # Bounds for (acc, steering)
+    hidden_layers = [1025, 256, 128]  # Model used in paper
+    actions_discretizations = [15, 42]
+    actions_bounds = [[-6, 6], [-0.7, 0.7]]  # Bounds for (acc, steering)
     lr: float = 1e-4
+    pretrained_model_path: str = 'experiments/human_regularized/human_anchor_policy_AS.pth'
 
 @dataclass
 class WandBSettings:
-    enabled: bool = False
-    project: str = 'nocturne_rl'
-    group: str = 'testing'
+    track: bool = True
+    project_name: str = 'human_regularized_rl'
+    group: str = 'nocturne'
+    exp_name: str = 'ppo_test'
+
