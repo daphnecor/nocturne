@@ -69,6 +69,7 @@ def main(args):
             sim_obj, scenario_cfg, num_stacked_states=5, model=model,
             )
 
+
     print(f'Collision rates: \n (veh <> veh) {collision_rate_veh.mean() * 100:.2f} % \n (veh <> road objects) {collision_rate_road_edge.mean() * 100:.2f} % \n')
     print(f'Goal rates: \n Vehicles that reach their goal {goal_rates.mean() * 100:.2f} %')
 
