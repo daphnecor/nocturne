@@ -21,7 +21,7 @@ single_agent_mode: False
 # all goals are achievable within 90 steps
 episode_length: 80
 # how many files of the total dataset to use. -1 indicates to use all of them
-num_files: 1 #-1 # Can use 1 to test on a single nocturne scene
+num_files: 1 # Can use 1 to test on a single nocturne scene
 scenario_path: '/scratch/dc4971/nocturne/data/formatted_json_v2_no_tl_train/'
 dt: 0.1
 sims_per_step: 10
@@ -109,9 +109,9 @@ results_dir: /scratch/dc4971/nocturne/results
 
 hydra:
   run:
-    dir: ${results_dir}/test/${now:%Y.%m.%d}/${experiment}/${now:%H.%M.%S}/${hydra.job.override_dirname}
+    dir: /scratch/dc4971/nocturne/results
   sweep:
-    dir: ${results_dir}/${oc.env:USER}/nocturne/sweep/${now:%Y.%m.%d}/${experiment}/${now:%H.%M.%S}
+    dir: /scratch/dc4971/nocturne/results
     subdir: ${hydra.job.num}
   launcher:
     timeout_min: 2880

@@ -13,10 +13,9 @@ class BehavioralCloningAgentJoint(nn.Module):
     def __init__(self, num_inputs, config, device):
         super(BehavioralCloningAgentJoint, self).__init__()
         self.num_states = num_inputs
-        self.hidden_layers = config["hidden_layers"]
-        self.actions_discretizations = config["actions_discretizations"]
-        self.actions_bounds = config["actions_bounds"]
-
+        self.hidden_layers = config.hidden_layers
+        self.actions_discretizations = config.actions_discretizations
+        self.actions_bounds = config.actions_bounds
         # Create an action space
         self.action_grids = [
             torch.linspace(a_min, a_max, a_count, requires_grad=False).to(device)
