@@ -42,20 +42,19 @@ class BaseEnv(Env):
             self.files = sorted(self.files)
         if cfg["num_files"] != -1:
             self.files = self.files[0 : cfg["num_files"]]
-        self.file = self.files[np.random.randint(len(self.files))]
+        self.file = self.files[np.random.randint(len(self.files))] 
         self.simulation = Simulation(
             os.path.join(cfg["scenario_path"], self.file), config=get_scenario_dict(cfg)
         )
-
         self.scenario = self.simulation.getScenario()
         self.controlled_vehicles = self.scenario.getObjectsThatMoved()
         self.cfg = cfg
         self.n_frames_stacked = self.cfg["subscriber"].get("n_frames_stacked", 1)
-        if self.n_frames_stacked > 1:
-            print(
-                "WARNING: you are frame stacking and may want to turn off recurrence if it is enabled\
-                  in your agent as frame-stacking may not be needed when using recurrent policies."
-            )
+        #if self.n_frames_stacked > 1:
+            # print(
+            #     "WARNING: you are frame stacking and may want to turn off recurrence if it is enabled\
+            #       in your agent as frame-stacking may not be needed when using recurrent policies."
+            # )
         self.single_agent_mode = cfg["single_agent_mode"]
         self.seed(cfg["seed"])
         self.episode_length = cfg["episode_length"]

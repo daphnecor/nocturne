@@ -130,8 +130,11 @@ class RolloutBuffer:
 
 if __name__ == "__main__":
 
+    # Configs
     args_exp = PPOExperimentConfig()
-    args_wandb = WandBSettings()
+    args_wandb = WandBSettings(
+        track=True
+    )
     args_env = NocturneConfig()
     args_human_pol = HumanPolicyConfig()
 
@@ -153,7 +156,7 @@ if __name__ == "__main__":
         % ("\n".join([f"|{key}|{value}|" for key, value in vars(args_exp).items()])),
     )
 
-    # TRY NOT TO MODIFY: seeding
+    # Seeding
     random.seed(args_exp.seed)
     np.random.seed(args_exp.seed)
     torch.manual_seed(args_exp.seed)
@@ -168,7 +171,6 @@ if __name__ == "__main__":
     observation_space_dim = env.observation_space.shape[0]
     action_space_dim = env.action_space.n
 
-    # Create ppo agent
     agent = Agent(env, observation_space_dim, action_space_dim).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args_exp.learning_rate, eps=1e-5)
     kl_loss = nn.KLDivLoss(reduction="batchmean")
@@ -184,141 +186,148 @@ if __name__ == "__main__":
         torch.load(args_human_pol.pretrained_model_path)
     )
 
-    # Setup
     global_step = 0 
     start_time = time.time()
-    num_updates = args_exp.total_iters
+    MAX_AGENTS = 3
 
-    for update in range(1, num_updates + 1):  # For a number of iterations
-        # We have a multi-agent setup, where the number of agents varies per traffic scene
-        # So, we create a buffer to store all agent trajectories
-        next_obs_dict = env.reset()
-        controlled_agents = [agent.getID() for agent in env.controlled_vehicles]
-        num_agents = len(controlled_agents)
-        buffer = RolloutBuffer(
-            controlled_agents,
-            args_exp.num_steps,
-            observation_space_dim,
-            action_space_dim,
-            device,
-        )
-        
-        current_ep_reward = 0
-        dict_next_done = {agent_id: False for agent_id in controlled_agents}
-        already_done_ids = env.done_ids.copy()
+    for iter in range(1, args_exp.total_iters + 1):  
 
-        logging.info(f"--- iter: {update} --- \n")
-        logging.info(f"Initializing new scene with {num_agents} agents.")
-        logging.info(f"Done ids = {already_done_ids}")
-        writer.add_scalar("charts/num_agents_in_scene", num_agents, global_step)
+        writer.add_scalar("charts/iter", iter, global_step)
 
-        # Annealing the rate if instructed to do so
-        if args_exp.anneal_lr:
-            frac = 1.0 - (update - 1.0) / args_exp.total_iters
-            lrnow = frac * args_exp.learning_rate
-            optimizer.param_groups[0]["lr"] = lrnow
+        # Storage
+        obs_tensor = torch.zeros((args_exp.num_policy_rollouts, args_exp.num_steps, MAX_AGENTS, observation_space_dim,))
+        rew_tensor = torch.zeros((args_exp.num_policy_rollouts, args_exp.num_steps, MAX_AGENTS))
+        act_tensor = torch.zeros((args_exp.num_policy_rollouts, args_exp.num_steps, MAX_AGENTS))
+        done_tensor = torch.zeros((args_exp.num_policy_rollouts, args_exp.num_steps, MAX_AGENTS))
+        logprob_tensor = torch.zeros((args_exp.num_policy_rollouts, args_exp.num_steps, MAX_AGENTS))
+        value_tensor = torch.zeros((args_exp.num_policy_rollouts, args_exp.num_steps, MAX_AGENTS))
 
-        # Rollout phase
-        logging.info("--- POLICY ROLLOUTS --- \n")
+        # # # #  Collect experience with current policy  # # # #
+        for rollout_step in range(args_exp.num_policy_rollouts):
 
-        for step in range(0, args_exp.num_steps):
-            logging.debug(f"Step: {step}")
+            logging.info(f'Policy rollouts | step {rollout_step}')
 
-            global_step += 1
+            # Reset environment
+            # NOTE: this can either be the same env or always a new traffic scene
+            next_obs_dict = env.reset()
+            controlled_agents = [agent.getID() for agent in env.controlled_vehicles]
+            num_agents = len(controlled_agents)
+            dict_next_done = {agent_id: False for agent_id in controlled_agents}
+            already_done_ids = env.done_ids.copy()
+            current_ep_reward = 0
 
-            for agent_id in controlled_agents:
-                buffer.dones[agent_id][step] = dict_next_done[agent_id] * 1
-                if agent_id not in already_done_ids:
-                    buffer.observations[agent_id][step, :] = torch.Tensor(
-                        next_obs_dict[agent_id]
-                    )
-                else:
-                    continue
-
-            # Action logic
-            with torch.no_grad():
-                # Nocturne expects a dictionary with actions, we create an item
-                # for every agent that is still active (i.e. not done)
-                action_dict = {
-                    agent_id: None
-                    for agent_id in controlled_agents
-                    if agent_id not in already_done_ids
-                }
-
-                for agent_id in action_dict.keys():
-                    # Take an action
-                    action, logprob, _, value = agent.get_action_and_value(
-                        torch.Tensor(next_obs_dict[agent_id]).to(device)
-                    )
-                    # Store in buffer
-                    buffer.values[agent_id][step] = value.flatten()
-                    buffer.actions[agent_id][step] = action
-                    buffer.logprobs[agent_id][step] = logprob
-                    # Store in action_dict 
-                    action_dict[agent_id] = action.item()
-
-            # Agents take actions simultaneously
-            next_obs_dict, reward_dict, next_done_dict, info_dict = env.step(
-                action_dict
+            # Set data buffer
+            #TODO: remove hard coding and redo buffer class
+            buffer = RolloutBuffer(
+                controlled_agents,
+                args_exp.num_steps,
+                observation_space_dim,
+                action_space_dim,
+                device,
             )
+            
+            # Adapt learning rate based on how far we are in the learning process
+            if args_exp.anneal_lr: 
+                frac = 1.0 - (iter - 1.0) / args_exp.total_iters
+                lrnow = frac * args_exp.learning_rate
+                optimizer.param_groups[0]["lr"] = lrnow
 
-            # Store rewards
-            for agent_id in next_obs_dict.keys():
-                buffer.rewards[agent_id][step] = torch.from_numpy(
-                    np.asarray(reward_dict[agent_id])
-                ).to(device)
+            # # # #  Interact with environment  # # # #
+            for step in range(0, args_exp.num_steps):
+                
+                global_step += 1
 
-            # Update episodal rewards
-            current_ep_reward += sum(reward_dict.values())
+                for agent_id in controlled_agents:
+                    buffer.dones[agent_id][step] = dict_next_done[agent_id] * 1
+                    if agent_id not in already_done_ids:
+                        buffer.observations[agent_id][step, :] = torch.Tensor(
+                            next_obs_dict[agent_id]
+                        )
+                    else:
+                        continue
 
-            logging.debug(f"step reward: {sum(reward_dict.values()):.2f}")
-            logging.debug(f"cumsum reward: {current_ep_reward:.2f}")
+                # Action logic
+                with torch.no_grad():
+                    # Nocturne expects a dictionary with actions, we create an item
+                    # for every agent that is still active (i.e. not done)
+                    action_dict = {
+                        agent_id: None
+                        for agent_id in controlled_agents
+                        if agent_id not in already_done_ids
+                    }
 
-            # Update done agents
-            for agent_id in next_obs_dict.keys():
-                if next_done_dict[agent_id]:
-                    dict_next_done[agent_id] = True
-                    # Fill dones with ones from step where terminal state was reached
-                    buffer.dones[agent_id][step:] = 1
+                    for agent_id in action_dict.keys():
+                        # Take an action
+                        action, logprob, _, value = agent.get_action_and_value(
+                            torch.Tensor(next_obs_dict[agent_id]).to(device)
+                        )
+                        # Store in buffer
+                        buffer.values[agent_id][step] = value.flatten()
+                        buffer.actions[agent_id][step] = action
+                        buffer.logprobs[agent_id][step] = logprob
+                        # Store in action_dict 
+                        action_dict[agent_id] = action.item()
 
-            already_done_ids = [
-                agent_id for agent_id, value in dict_next_done.items() if value
-            ]
+                # Take simultaneous action in env
+                next_obs_dict, reward_dict, next_done_dict, info_dict = env.step(
+                    action_dict
+                )
 
-            # End the game early if all agents are done
-            if len(already_done_ids) == num_agents:
-                logging.info(f"Terminate episode after {step} steps \n")
-                break
+                # Store rewards
+                for agent_id in next_obs_dict.keys():
+                    buffer.rewards[agent_id][step] = torch.from_numpy(
+                        np.asarray(reward_dict[agent_id])
+                    ).to(device)
 
-        # Compute goal achieved, collision rate etc
-        total_goal_achieved = sum(1 for item in info_dict.values() if item['goal_achieved'])
-        total_collided = sum(1 for item in info_dict.values() if item['collided'])
-        total_veh_veh_collided = sum(1 for item in info_dict.values() if item['veh_veh_collision'])
-        total_veh_edge_collided = sum(1 for item in info_dict.values() if item['veh_edge_collision'])
+                # Update episodal rewards
+                current_ep_reward += sum(reward_dict.values())
 
-        logging.info(f"episodic_return: {current_ep_reward}")
-        writer.add_scalar("charts/episodic_return", current_ep_reward, global_step)
-        writer.add_scalar("charts/episodic_length", step, global_step)
-        writer.add_scalar("charts/goal_achieved", total_goal_achieved, update)
-        writer.add_scalar("charts/agents_collided", total_collided, update)
-        writer.add_scalar("charts/veh_veh_collisions", total_veh_veh_collided, update)
-        writer.add_scalar("charts/veh_edge_collisions", total_veh_edge_collided, update)
+                # Update done agents
+                for agent_id in next_obs_dict.keys():
+                    if next_done_dict[agent_id]:
+                        dict_next_done[agent_id] = True
+                        # Fill dones with ones from step where terminal state was reached
+                        buffer.dones[agent_id][step:] = 1
 
-        # Bootstrap value if not done
-        logging.info(f"--- BOOTSTRAP ---")
+                already_done_ids = [
+                    agent_id for agent_id, value in dict_next_done.items() if value
+                ]
 
-        # Take last obseration (num_agents x obs_dim)
-        next_obs = dict_to_tensor(buffer.observations)[step].reshape(
-            (num_agents, observation_space_dim)
-        )
-        next_done = torch.Tensor(list(dict_next_done.values())).to(device) # Most recent done dict
-        dones = dict_to_tensor(buffer.dones).to(device)
-        values = dict_to_tensor(buffer.values).to(device)
-        rewards = dict_to_tensor(buffer.rewards).to(device)
+                # End the game early if all agents are done
+                if len(already_done_ids) == num_agents or step == args_exp.num_steps:
+                    last_step = step
+                    logging.info(f"Terminate episode after {step} steps \n")
+                    break
+                        
+            
+            # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+            
+            # Store rollout scene experience
+            obs_tensor[rollout_step, :, :num_agents, :] = dict_to_tensor(buffer.observations).to(device)
+            rew_tensor[rollout_step, :, :num_agents] = dict_to_tensor(buffer.rewards).to(device)
+            act_tensor[rollout_step, :, :num_agents] = dict_to_tensor(buffer.actions).to(device)
+            done_tensor[rollout_step, :, :num_agents] = dict_to_tensor(buffer.dones).to(device)
+            logprob_tensor[rollout_step, :, :num_agents] = dict_to_tensor(buffer.logprobs).to(device)
+            value_tensor[rollout_step, :, :num_agents] = dict_to_tensor(buffer.values).to(device)
+            
+            logging.info(f"Episodic_return: {current_ep_reward}")
+            writer.add_scalar("charts/episodic_return", current_ep_reward, global_step)
+            writer.add_scalar("charts/episodic_length", step, global_step)
+
+
+        # # # # Compute advantage estimate via GAE on collected experience # # # #
+        # Select the last observation for every policy rollout
+        next_obs = obs_tensor[:, last_step, :, :].reshape(-1, observation_space_dim) # (N_steps * N_rollouts, D_obs)
+        next_done = done_tensor[:, last_step, :].reshape(-1) # (N_steps * N_rollouts)
+
+        # Flatten over rollout x agent dimension
+        dones = done_tensor.reshape((args_exp.num_steps, MAX_AGENTS * args_exp.num_policy_rollouts))
+        values = value_tensor.reshape((args_exp.num_steps, MAX_AGENTS * args_exp.num_policy_rollouts))
+        rewards = rew_tensor.reshape((args_exp.num_steps, MAX_AGENTS * args_exp.num_policy_rollouts))
 
         with torch.no_grad():
-            next_value = agent.get_value(next_obs).reshape(1, -1)
-            advantages = torch.zeros((args_exp.num_steps, num_agents)).to(device)
+            next_value = agent.get_value(next_obs).reshape(-1)
+            advantages= torch.zeros((args_exp.num_steps, MAX_AGENTS * args_exp.num_policy_rollouts))
             lastgaelam = 0
             for t in reversed(range(args_exp.num_steps)):
                 if t == args_exp.num_steps - 1:
@@ -335,19 +344,16 @@ if __name__ == "__main__":
                 )
             returns = advantages + values
 
-        logging.info("--- OPTIMIZE POLICY NETWORK --- \n")
 
-        # Learning phase
+        # # # #  Optimization   # # # #
         # Convert the dictionaries to tensors, then flatten over (num_steps x agents)
-        b_obs = dict_to_tensor(buffer.observations).reshape(
-            -1, observation_space_dim
-        )  # (batch_size x obs_space_dim)
-        b_logprobs = dict_to_tensor(buffer.logprobs).reshape(-1) # (batch_size x 1)
-        b_actions = dict_to_tensor(buffer.actions).reshape(-1)
+        b_obs = obs_tensor.reshape(-1, observation_space_dim)
+        b_logprobs = logprob_tensor.reshape(-1)
+        b_actions = act_tensor.reshape(-1)
         b_advantages = advantages.reshape(-1)
         b_returns = returns.reshape(-1)
         b_values = values.reshape(-1)
-
+        
         # Optimizing the policy and value network
         # Since in our multi-agent env some agents finsh earlier then others,
         # there will be entries without observations. We filter these out, as we
