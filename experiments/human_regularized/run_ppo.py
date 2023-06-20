@@ -15,13 +15,15 @@ from torch.utils.tensorboard import SummaryWriter
 import wandb
 #import pdb
 from constants import PPOExperimentConfig, NocturneConfig, WandBSettings, HumanPolicyConfig
-
+import imageio
 import yaml
 from base_env import BaseEnv
+from nocturne import Action
 import logging
 from imit_models import BehavioralCloningAgentJoint
+from cfgs.config import set_display_window
 
-logging.basicConfig(level=logging.CRITICAL)
+logging.basicConfig(level=logging.INFO)
 
 
 def make_env(config_path, seed, run_name):
@@ -132,9 +134,7 @@ if __name__ == "__main__":
 
     # Configs
     args_exp = PPOExperimentConfig()
-    args_wandb = WandBSettings(
-        track=True
-    )
+    args_wandb = WandBSettings()
     args_env = NocturneConfig()
     args_human_pol = HumanPolicyConfig()
 
@@ -147,6 +147,7 @@ if __name__ == "__main__":
             config = asdict(args_wandb),
             group = "nocturne",
             name = run_name,
+            save_code=True,
         )
 
     writer = SummaryWriter(f"runs/{run_name}")
@@ -165,6 +166,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() and args_exp.cuda else "cpu")
 
     # Env setup
+    set_display_window()
     env = make_env(args_env.nocturne_rl_cfg, args_exp.seed, run_name)
 
     # State and action space dimension
@@ -188,11 +190,9 @@ if __name__ == "__main__":
 
     global_step = 0 
     start_time = time.time()
-    MAX_AGENTS = 3
+    MAX_AGENTS = 2
 
     for iter in range(1, args_exp.total_iters + 1):  
-
-        writer.add_scalar("charts/iter", iter, global_step)
 
         # Storage
         obs_tensor = torch.zeros((args_exp.num_policy_rollouts, args_exp.num_steps, MAX_AGENTS, observation_space_dim,))
@@ -201,14 +201,16 @@ if __name__ == "__main__":
         done_tensor = torch.zeros((args_exp.num_policy_rollouts, args_exp.num_steps, MAX_AGENTS))
         logprob_tensor = torch.zeros((args_exp.num_policy_rollouts, args_exp.num_steps, MAX_AGENTS))
         value_tensor = torch.zeros((args_exp.num_policy_rollouts, args_exp.num_steps, MAX_AGENTS))
+        veh_coll_tensor = torch.zeros((args_exp.num_policy_rollouts))
+        edge_coll_tensor = torch.zeros((args_exp.num_policy_rollouts))
+        goal_tensor = torch.zeros((args_exp.num_policy_rollouts))
 
         # # # #  Collect experience with current policy  # # # #
         for rollout_step in range(args_exp.num_policy_rollouts):
 
-            logging.info(f'Policy rollouts | step {rollout_step}')
-
             # Reset environment
-            # NOTE: this can either be the same env or always a new traffic scene
+            # NOTE: this can either be the same env or a new traffic scene
+            # currently using the same scene for debugging purposes
             next_obs_dict = env.reset()
             controlled_agents = [agent.getID() for agent in env.controlled_vehicles]
             num_agents = len(controlled_agents)
@@ -216,8 +218,9 @@ if __name__ == "__main__":
             already_done_ids = env.done_ids.copy()
             current_ep_reward = 0
 
-            # Set data buffer
-            #TODO: remove hard coding and redo buffer class
+            logging.info(f'Policy rollouts | Scene has {num_agents} agents | step {rollout_step}')
+
+            # Set data buffer for within scene logging
             buffer = RolloutBuffer(
                 controlled_agents,
                 args_exp.num_steps,
@@ -232,8 +235,21 @@ if __name__ == "__main__":
                 lrnow = frac * args_exp.learning_rate
                 optimizer.param_groups[0]["lr"] = lrnow
 
+            frames = []
+
             # # # #  Interact with environment  # # # #
             for step in range(0, args_exp.num_steps):
+                
+                if args_wandb.record_video:
+                    # Render env every zeroth rollout
+                    if step % 5 == 0 and rollout_step == 0:
+                        render_scene = env.scenario.getImage(
+                            img_width=1200,
+                            img_height=1200,
+                            draw_target_positions=True,
+                            padding=0,
+                        )
+                        frames.append(render_scene.T)
                 
                 global_step += 1
 
@@ -268,16 +284,51 @@ if __name__ == "__main__":
                         # Store in action_dict 
                         action_dict[agent_id] = action.item()
 
+                moving_vehs = env.scenario.getObjectsThatMoved()
+
+                if args_env.take_random_actions:
+                   
+                    # Sanity check A: If activated, agents take random actions
+                    #accel_interval = np.linspace(-6, 6, num=15)
+                    #steer_interval = np.linspace(-0.7, 0.7, num=21)
+                    # OR take very simple intervals
+                    accel_interval = np.array([-6, 6]) 
+                    steer_interval = np.array([-1, 1]) 
+                    action_dict = {
+                        agent_id: Action(
+                            acceleration = np.random.choice(accel_interval, size=1),
+                            steering = np.random.choice(steer_interval, size=1),
+                        )
+                        for agent_id in controlled_agents
+                        if agent_id not in already_done_ids
+                    }
+
+                    # Sanity check B: take fixed actions
+                    # action_dict = {
+                    #     veh.id: Action(acceleration=2.0, steering=1.0)
+                    #     for veh in moving_vehs
+                    # }
+
                 # Take simultaneous action in env
                 next_obs_dict, reward_dict, next_done_dict, info_dict = env.step(
                     action_dict
                 )
+
+                # Sanity check C: Check (x, y) coordinates for both vehicles
+                if args_wandb.track:
+                    for veh in env.controlled_vehicles:
+                        wandb.log({"timestep": step, f"veh_{veh.id}_x_pos": veh.position.x, f"veh_{veh.id}_y_pos": veh.position.y})
 
                 # Store rewards
                 for agent_id in next_obs_dict.keys():
                     buffer.rewards[agent_id][step] = torch.from_numpy(
                         np.asarray(reward_dict[agent_id])
                     ).to(device)
+
+                # Update collisions and whether goal is achieved
+                veh_coll_tensor[rollout_step] += sum(info['veh_veh_collision'] for info in info_dict.values())
+                edge_coll_tensor[rollout_step] += sum(info['veh_edge_collision'] for info in info_dict.values())
+                goal_tensor[rollout_step] += sum(info['goal_achieved'] for info in info_dict.values())
 
                 # Update episodal rewards
                 current_ep_reward += sum(reward_dict.values())
@@ -299,7 +350,6 @@ if __name__ == "__main__":
                     logging.info(f"Terminate episode after {step} steps \n")
                     break
                         
-            
             # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
             
             # Store rollout scene experience
@@ -310,11 +360,26 @@ if __name__ == "__main__":
             logprob_tensor[rollout_step, :, :num_agents] = dict_to_tensor(buffer.logprobs).to(device)
             value_tensor[rollout_step, :, :num_agents] = dict_to_tensor(buffer.values).to(device)
             
+            # Normalize counts by agents in scene
+            veh_coll_tensor[rollout_step] /= num_agents
+            edge_coll_tensor[rollout_step] /= num_agents
+            goal_tensor[rollout_step] /= num_agents
+
             logging.info(f"Episodic_return: {current_ep_reward}")
+            writer.add_scalar("charts/num_agents", num_agents, global_step)
             writer.add_scalar("charts/episodic_return", current_ep_reward, global_step)
             writer.add_scalar("charts/episodic_length", step, global_step)
+            writer.add_scalar("charts/goal_achieved_rate", goal_tensor[rollout_step], global_step)
+            writer.add_scalar("charts/veh_veh_collision_rate", veh_coll_tensor[rollout_step], global_step)
+            writer.add_scalar("charts/veh_edge_collision_rate", edge_coll_tensor[rollout_step], global_step)
 
-
+            if rollout_step == 0 and args_wandb.record_video:
+                movie_frames = np.array(frames, dtype=np.uint8)
+                wandb.log({"iter": iter, "scene_videos": wandb.Video(movie_frames, fps=args_wandb.fps, caption=f'Training iter: {iter}')})
+                del movie_frames
+        
+        writer.add_scalar("charts/iter", iter, global_step)
+        
         # # # # Compute advantage estimate via GAE on collected experience # # # #
         # Select the last observation for every policy rollout
         next_obs = obs_tensor[:, last_step, :, :].reshape(-1, observation_space_dim) # (N_steps * N_rollouts, D_obs)
@@ -377,9 +442,10 @@ if __name__ == "__main__":
                 mb_inds = valid_b_inds[start:end]
 
                 # COMPUTE KL DIV TO HUMAN ANCHOR POLICY
+                # NOTE: Disabled for now
                 action, log_prob, tau_dist = human_anchor_policy(b_obs[mb_inds])
                 actor_dist = agent.get_policy(b_obs[mb_inds])
-                kl_div = kl_loss(tau_dist.probs, actor_dist.probs)
+                #kl_div = kl_loss(tau_dist.probs, actor_dist.probs)
 
                 # Check if the minibatch has at least two elements
                 if len(mb_inds) < 2:
@@ -436,7 +502,7 @@ if __name__ == "__main__":
                     pg_loss
                     - args_exp.ent_coef * entropy_loss
                     + args_exp.vf_coef * v_loss
-                    - args_exp.lam * kl_div
+                    #- args_exp.lam * kl_div
                 )
 
                 logging.info(f"L = {loss}")
@@ -450,12 +516,7 @@ if __name__ == "__main__":
                 if approx_kl > args_exp.target_kl:
                     break
 
-        # Clear buffer
-        # logging.info("optim step done: clear buffer \n")
-        # buffer.clear()
-
         y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
-        # TODO: something goes wrong with computing the returns
         # var_y = np.var(y_true)
         # explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
 
@@ -473,7 +534,6 @@ if __name__ == "__main__":
         writer.add_scalar("losses/old_approx_kl", old_approx_kl.item(), global_step)
         writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
         writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
-        # writer.add_scalar("losses/explained_variance", explained_var, global_step)
         logging.info(f"SPS: {int(global_step / (time.time() - start_time))}")
         logging.info(f"loss: {loss}")
         writer.add_scalar(
