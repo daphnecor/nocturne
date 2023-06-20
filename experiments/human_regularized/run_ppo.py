@@ -15,13 +15,11 @@ from torch.utils.tensorboard import SummaryWriter
 import wandb
 #import pdb
 from constants import PPOExperimentConfig, NocturneConfig, WandBSettings, HumanPolicyConfig
-import imageio
 import yaml
 from base_env import BaseEnv
 from nocturne import Action
 import logging
 from imit_models import BehavioralCloningAgentJoint
-from cfgs.config import set_display_window
 
 logging.basicConfig(level=logging.INFO)
 
@@ -166,7 +164,6 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() and args_exp.cuda else "cpu")
 
     # Env setup
-    set_display_window()
     env = make_env(args_env.nocturne_rl_cfg, args_exp.seed, run_name)
 
     # State and action space dimension

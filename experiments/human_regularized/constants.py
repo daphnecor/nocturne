@@ -40,7 +40,7 @@ class WandBSettings:
     fps: int = 5
     project_name: str = 'human_regularized_rl'
     group: str = 'nocturne'
-    exp_name: str = 'vid_test_ppo_agent'
+    exp_name: str = 'vid_test_ppo_agent_cluster'
 
 @dataclass
 class HumanPolicyConfig:

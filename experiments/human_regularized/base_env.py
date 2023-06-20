@@ -388,13 +388,16 @@ class BaseEnv(Env):
         while not enough_vehicles:
             #NOTE: HARDCODED FOR DEBUGGING
             #self.file = 'tfrecord-00145-of-01000_267.json' # This file has only 2 agents
-            self.file = 'example_scenario.json'
+            self.file = 'experiments/human_regularized/example_scenario.json'
             #NOTE: DEFAULT BELOW
             #self.file = self.files[np.random.randint(len(self.files))]
             self.simulation = Simulation(
-                os.path.join(self.cfg["scenario_path"], self.file),
-                config=get_scenario_dict(self.cfg),
+                self.file, config=get_scenario_dict(self.cfg),
             )
+            # self.simulation = Simulation(
+            #     os.path.join(self.cfg["scenario_path"], self.file),
+            #     config=get_scenario_dict(self.cfg),
+            # )
             self.scenario = self.simulation.getScenario()
             """##################################################################
                 Construct context dictionary of observations that can be used to
