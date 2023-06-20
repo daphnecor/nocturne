@@ -386,7 +386,11 @@ class BaseEnv(Env):
         # we don't want to initialize scenes with 0 actors after satisfying
         # all the conditions on a scene that we have
         while not enough_vehicles:
-            self.file = self.files[np.random.randint(len(self.files))]
+            #NOTE: HARDCODED FOR DEBUGGING
+            #self.file = 'tfrecord-00145-of-01000_267.json' # This file has only 2 agents
+            self.file = 'example_scenario.json'
+            #NOTE: DEFAULT BELOW
+            #self.file = self.files[np.random.randint(len(self.files))]
             self.simulation = Simulation(
                 os.path.join(self.cfg["scenario_path"], self.file),
                 config=get_scenario_dict(self.cfg),
