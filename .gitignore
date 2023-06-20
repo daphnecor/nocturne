@@ -37,7 +37,7 @@ logs/
 dataset/
 
 # trained models
-*.pth
+#*.pth
 
 # tensorboard
 *tfevents*
