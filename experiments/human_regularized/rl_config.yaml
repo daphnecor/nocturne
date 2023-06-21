@@ -28,12 +28,12 @@ sims_per_step: 10
 img_as_state: False
 discretize_actions: True
 include_head_angle: False # Whether to include the head tilt/angle as part of a vehicle's action
-accel_discretization: 5 #15
+accel_discretization: 15
 accel_lower_bound: -6
 accel_upper_bound: 6
 steering_lower_bound: -0.7 # corresponds to about 40 degrees of max steering angle
 steering_upper_bound: 0.7 # corresponds to about 40 degrees of max steering angle
-steering_discretization: 5 #42
+steering_discretization: 43
 head_angle_lower_bound: -1.6
 head_angle_upper_bound: 1.6
 head_angle_discretization: 5
@@ -92,7 +92,7 @@ rew_cfg:
   heading_target: False
   heading_target_tolerance: 0.3
 subscriber:
-  view_angle: 2.1
+  view_angle: 3.14
   # the distance which the cone extends before agents are not visible
   # TODO(eugenevinitsky) pick the right number
   view_dist: 80
