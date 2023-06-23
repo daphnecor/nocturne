@@ -1,27 +1,33 @@
-import argparse
-import os
+import datetime
+import glob
+import logging
 import random
 import time
-from distutils.util import strtobool
-from dataclasses import dataclass, asdict
 
-import gym
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
-import wandb
-#import pdb
-from constants import PPOExperimentConfig, NocturneConfig, WandBSettings, HumanPolicyConfig
-import yaml
-from base_env import BaseEnv
-from nocturne import Action
-import logging
-from imit_models import BehavioralCloningAgentJoint
+#from torch.profiler import profile, schedule, tensorboard_trace_handler
 
-logging.basicConfig(level=logging.INFO)
+import wandb
+import yaml
+
+from base_env import BaseEnv
+from cfgs.config import set_display_window
+from constants import (
+    PPOExperimentConfig,
+    NocturneConfig,
+    WandBSettings,
+    HumanPolicyConfig,
+)
+from dataclasses import asdict, dataclass
+from imit_models import BehavioralCloningAgentJoint
+from nocturne import Action
+
+logging.basicConfig(level=logging.CRITICAL)
 
 
 def make_env(config_path, seed, run_name):
@@ -46,7 +52,6 @@ def dict_to_tensor(my_dict):
     stacked_tensor = torch.stack(tensor_list, dim=1)
     return stacked_tensor.squeeze()
 
-
 class Agent(nn.Module):
     def __init__(self, envs, state_dim, action_dim):
         super().__init__()
@@ -56,7 +61,7 @@ class Agent(nn.Module):
             layer_init(nn.Linear(64, 64)),
             nn.Tanh(),
             layer_init(nn.Linear(64, 1), std=1.0),
-        )
+        ).to(device)
         self.actor = nn.Sequential(
             layer_init(nn.Linear(state_dim, 64)),
             nn.Tanh(),
@@ -127,7 +132,6 @@ class RolloutBuffer:
             self.dones[key].zero_()
             self.values[key].zero_()
 
-
 if __name__ == "__main__":
 
     # Configs
@@ -136,24 +140,26 @@ if __name__ == "__main__":
     args_env = NocturneConfig()
     args_human_pol = HumanPolicyConfig()
 
-    run_name = f"{args_env.env_id}__{args_wandb.exp_name}"
-
-    if args_wandb.track:
-        wandb.init(
-            project = args_wandb.project_name,
-            sync_tensorboard = True,
-            config = asdict(args_wandb),
-            group = "nocturne",
-            name = run_name,
-            save_code=True,
-        )
-
+    # Logging
+    now = datetime.datetime.now()
+    formatted_time = now.strftime("%D%H%M")
+    run_name = f"{args_env.env_id}__{args_wandb.exp_name}_{formatted_time}"
+    
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
         "hyperparameters",
-        "|param|value|\n|-|-|\n%s"
-        % ("\n".join([f"|{key}|{value}|" for key, value in vars(args_exp).items()])),
+        "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args_exp).items()])),
     )
+
+    if args_wandb.track:
+        wandb.init(
+            project=args_wandb.project_name,
+            sync_tensorboard=True,
+            config=asdict(args_wandb),
+            group="nocturne",
+            name=run_name,
+            save_code=True,
+        )
 
     # Seeding
     random.seed(args_exp.seed)
@@ -161,9 +167,14 @@ if __name__ == "__main__":
     torch.manual_seed(args_exp.seed)
     torch.backends.cudnn.deterministic = args_exp.torch_deterministic
 
-    device = torch.device("cuda" if torch.cuda.is_available() and args_exp.cuda else "cpu")
+    device = torch.device(
+        "cuda" if torch.cuda.is_available() and args_exp.cuda else "cpu"
+    )
+
+    logging.critical(f'DEVICE: {device}')
 
     # Env setup
+    set_display_window()
     env = make_env(args_env.nocturne_rl_cfg, args_exp.seed, run_name)
 
     # State and action space dimension
@@ -180,42 +191,64 @@ if __name__ == "__main__":
         config=args_human_pol,
         device=device,
     ).to(device)
-    
+
     human_anchor_policy.load_state_dict(
         torch.load(args_human_pol.pretrained_model_path)
     )
 
-    global_step = 0 
+    global_step = 0
     start_time = time.time()
     MAX_AGENTS = 2
 
-    for iter in range(1, args_exp.total_iters + 1):  
+    for iter in range(1, args_exp.total_iters + 1):
+
+        logging.critical(f'iter: {iter}')
 
         # Storage
-        obs_tensor = torch.zeros((args_exp.num_policy_rollouts, args_exp.num_steps, MAX_AGENTS, observation_space_dim,))
-        rew_tensor = torch.zeros((args_exp.num_policy_rollouts, args_exp.num_steps, MAX_AGENTS))
-        act_tensor = torch.zeros((args_exp.num_policy_rollouts, args_exp.num_steps, MAX_AGENTS))
-        done_tensor = torch.zeros((args_exp.num_policy_rollouts, args_exp.num_steps, MAX_AGENTS))
-        logprob_tensor = torch.zeros((args_exp.num_policy_rollouts, args_exp.num_steps, MAX_AGENTS))
-        value_tensor = torch.zeros((args_exp.num_policy_rollouts, args_exp.num_steps, MAX_AGENTS))
-        veh_coll_tensor = torch.zeros((args_exp.num_policy_rollouts))
-        edge_coll_tensor = torch.zeros((args_exp.num_policy_rollouts))
-        goal_tensor = torch.zeros((args_exp.num_policy_rollouts))
+        obs_tensor = torch.zeros(
+            (
+                args_exp.num_policy_rollouts,
+                args_exp.num_steps,
+                MAX_AGENTS,
+                observation_space_dim,
+            )
+        ).to(device)
+        rew_tensor = torch.zeros(
+            (args_exp.num_policy_rollouts, args_exp.num_steps, MAX_AGENTS)
+        ).to(device)
+        act_tensor = torch.zeros(
+            (args_exp.num_policy_rollouts, args_exp.num_steps, MAX_AGENTS)
+        ).to(device)
+        done_tensor = torch.zeros(
+            (args_exp.num_policy_rollouts, args_exp.num_steps, MAX_AGENTS)
+        ).to(device)
+        logprob_tensor = torch.zeros(
+            (args_exp.num_policy_rollouts, args_exp.num_steps, MAX_AGENTS)
+        ).to(device)
+        value_tensor = torch.zeros(
+            (args_exp.num_policy_rollouts, args_exp.num_steps, MAX_AGENTS)
+        ).to(device)
+        veh_coll_tensor = torch.zeros((args_exp.num_policy_rollouts)).to(device)
+        edge_coll_tensor = torch.zeros((args_exp.num_policy_rollouts)).to(device)
+        goal_tensor = torch.zeros((args_exp.num_policy_rollouts)).to(device)
 
+        #TODO: Do rollouts on the GPU
         # # # #  Collect experience with current policy  # # # #
+        start_rollout = time.time()
         for rollout_step in range(args_exp.num_policy_rollouts):
 
             # Reset environment
             # NOTE: this can either be the same env or a new traffic scene
             # currently using the same scene for debugging purposes
+            start_reset = time.time()
+
             next_obs_dict = env.reset()
+
             controlled_agents = [agent.getID() for agent in env.controlled_vehicles]
             num_agents = len(controlled_agents)
             dict_next_done = {agent_id: False for agent_id in controlled_agents}
             already_done_ids = env.done_ids.copy()
             current_ep_reward = 0
-
-            logging.info(f'Policy rollouts | Scene has {num_agents} agents | step {rollout_step}')
 
             # Set data buffer for within scene logging
             buffer = RolloutBuffer(
@@ -225,9 +258,9 @@ if __name__ == "__main__":
                 action_space_dim,
                 device,
             )
-            
+
             # Adapt learning rate based on how far we are in the learning process
-            if args_exp.anneal_lr: 
+            if args_exp.anneal_lr:
                 frac = 1.0 - (iter - 1.0) / args_exp.total_iters
                 lrnow = frac * args_exp.learning_rate
                 optimizer.param_groups[0]["lr"] = lrnow
@@ -235,19 +268,35 @@ if __name__ == "__main__":
             frames = []
 
             # # # #  Interact with environment  # # # #
+            start_env = time.time()
             for step in range(0, args_exp.num_steps):
-                
                 if args_wandb.record_video:
                     # Render env every zeroth rollout
                     if step % 5 == 0 and rollout_step == 0:
-                        render_scene = env.scenario.getImage(
-                            img_width=1200,
-                            img_height=1200,
-                            draw_target_positions=True,
-                            padding=0,
-                        )
+                        if args_wandb.render_mode == "whole_scene":
+                            render_scene = env.scenario.getImage(
+                                img_width=args_wandb.window_size,
+                                img_height=args_wandb.window_size,
+                                padding=0,
+                                draw_target_positions=args_wandb.draw_target,
+                            )
+                            
+                        elif args_wandb.render_mode == "agent_view":
+                            render_scene = env.scenario.getConeImage(
+                                # Select one of the vehicles we are controlling
+                                source=env.controlled_vehicles[0], 
+                                view_dist=args_env.view_dist,
+                                view_angle=args_env.view_angle,
+                                head_angle=0,
+                                img_width=args_wandb.window_size,
+                                img_height=args_wandb.window_size,
+                                padding=10.0,
+                                draw_target_position=args_wandb.draw_target,
+                            )
+
                         frames.append(render_scene.T)
-                
+                            
+
                 global_step += 1
 
                 for agent_id in controlled_agents:
@@ -260,6 +309,7 @@ if __name__ == "__main__":
                         continue
 
                 # Action logic
+                #TODO: multiprocess actions
                 with torch.no_grad():
                     # Nocturne expects a dictionary with actions, we create an item
                     # for every agent that is still active (i.e. not done)
@@ -278,23 +328,22 @@ if __name__ == "__main__":
                         buffer.values[agent_id][step] = value.flatten()
                         buffer.actions[agent_id][step] = action
                         buffer.logprobs[agent_id][step] = logprob
-                        # Store in action_dict 
+                        # Store in action_dict
                         action_dict[agent_id] = action.item()
 
                 moving_vehs = env.scenario.getObjectsThatMoved()
 
                 if args_env.take_random_actions:
-                   
                     # Sanity check A: If activated, agents take random actions
-                    #accel_interval = np.linspace(-6, 6, num=15)
-                    #steer_interval = np.linspace(-0.7, 0.7, num=21)
+                    # accel_interval = np.linspace(-6, 6, num=15)
+                    # steer_interval = np.linspace(-0.7, 0.7, num=21)
                     # OR take very simple intervals
-                    accel_interval = np.array([-6, 6]) 
-                    steer_interval = np.array([-1, 1]) 
+                    accel_interval = np.array([-6, 6])
+                    steer_interval = np.array([-1, 1])
                     action_dict = {
                         agent_id: Action(
-                            acceleration = np.random.choice(accel_interval, size=1),
-                            steering = np.random.choice(steer_interval, size=1),
+                            acceleration=np.random.choice(accel_interval, size=1),
+                            steering=np.random.choice(steer_interval, size=1),
                         )
                         for agent_id in controlled_agents
                         if agent_id not in already_done_ids
@@ -314,7 +363,13 @@ if __name__ == "__main__":
                 # Sanity check C: Check (x, y) coordinates for both vehicles
                 if args_wandb.track:
                     for veh in env.controlled_vehicles:
-                        wandb.log({"timestep": step, f"veh_{veh.id}_x_pos": veh.position.x, f"veh_{veh.id}_y_pos": veh.position.y})
+                        wandb.log(
+                            {
+                                "global_step": step,
+                                f"veh_{veh.id}_x_pos": veh.position.x,
+                                f"veh_{veh.id}_y_pos": veh.position.y,
+                            }
+                        )
 
                 # Store rewards
                 for agent_id in next_obs_dict.keys():
@@ -323,9 +378,15 @@ if __name__ == "__main__":
                     ).to(device)
 
                 # Update collisions and whether goal is achieved
-                veh_coll_tensor[rollout_step] += sum(info['veh_veh_collision'] for info in info_dict.values())
-                edge_coll_tensor[rollout_step] += sum(info['veh_edge_collision'] for info in info_dict.values())
-                goal_tensor[rollout_step] += sum(info['goal_achieved'] for info in info_dict.values())
+                veh_coll_tensor[rollout_step] += sum(
+                    info["veh_veh_collision"] for info in info_dict.values()
+                )
+                edge_coll_tensor[rollout_step] += sum(
+                    info["veh_edge_collision"] for info in info_dict.values()
+                )
+                goal_tensor[rollout_step] += sum(
+                    info["goal_achieved"] for info in info_dict.values()
+                )
 
                 # Update episodal rewards
                 current_ep_reward += sum(reward_dict.values())
@@ -344,52 +405,97 @@ if __name__ == "__main__":
                 # End the game early if all agents are done
                 if len(already_done_ids) == num_agents or step == args_exp.num_steps:
                     last_step = step
-                    logging.info(f"Terminate episode after {step} steps \n")
+                    logging.info(f'complete_episode: {time.time() - start_env} | time_per_step: {(time.time() - start_env)/step} \n')
                     break
-                        
+
+    
             # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-            
+        
             # Store rollout scene experience
-            obs_tensor[rollout_step, :, :num_agents, :] = dict_to_tensor(buffer.observations).to(device)
-            rew_tensor[rollout_step, :, :num_agents] = dict_to_tensor(buffer.rewards).to(device)
-            act_tensor[rollout_step, :, :num_agents] = dict_to_tensor(buffer.actions).to(device)
-            done_tensor[rollout_step, :, :num_agents] = dict_to_tensor(buffer.dones).to(device)
-            logprob_tensor[rollout_step, :, :num_agents] = dict_to_tensor(buffer.logprobs).to(device)
-            value_tensor[rollout_step, :, :num_agents] = dict_to_tensor(buffer.values).to(device)
-            
+            obs_tensor[rollout_step, :, :num_agents, :] = dict_to_tensor(
+                buffer.observations
+            ).to(device)
+            rew_tensor[rollout_step, :, :num_agents] = dict_to_tensor(
+                buffer.rewards
+            ).to(device)
+            act_tensor[rollout_step, :, :num_agents] = dict_to_tensor(
+                buffer.actions
+            ).to(device)
+            done_tensor[rollout_step, :, :num_agents] = dict_to_tensor(buffer.dones).to(
+                device
+            )
+            logprob_tensor[rollout_step, :, :num_agents] = dict_to_tensor(
+                buffer.logprobs
+            ).to(device)
+            value_tensor[rollout_step, :, :num_agents] = dict_to_tensor(
+                buffer.values
+            ).to(device)
+
             # Normalize counts by agents in scene
             veh_coll_tensor[rollout_step] /= num_agents
             edge_coll_tensor[rollout_step] /= num_agents
             goal_tensor[rollout_step] /= num_agents
 
-            logging.info(f"Episodic_return: {current_ep_reward}")
-            writer.add_scalar("charts/num_agents", num_agents, global_step)
-            writer.add_scalar("charts/episodic_return", current_ep_reward, global_step)
-            writer.add_scalar("charts/episodic_length", step, global_step)
-            writer.add_scalar("charts/goal_achieved_rate", goal_tensor[rollout_step], global_step)
-            writer.add_scalar("charts/veh_veh_collision_rate", veh_coll_tensor[rollout_step], global_step)
-            writer.add_scalar("charts/veh_edge_collision_rate", edge_coll_tensor[rollout_step], global_step)
+            # Clear buffer for next rollout
+            buffer.clear()
 
-            if rollout_step == 0 and args_wandb.record_video:
-                movie_frames = np.array(frames, dtype=np.uint8)
-                wandb.log({"iter": iter, "scene_videos": wandb.Video(movie_frames, fps=args_wandb.fps, caption=f'Training iter: {iter}')})
-                del movie_frames
-        
-        writer.add_scalar("charts/iter", iter, global_step)
-        
+            logging.info(f"Episodic_return: {current_ep_reward}")
+
+            if args_wandb.track:
+                wandb.log({
+                    "global_step": global_step,
+                    "charts/num_agents_in_scene": num_agents,
+                    "charts/episodic_return": current_ep_reward,
+                    "charts/episodic_length": step,
+                    "charts/goal_achieved_rate": goal_tensor[rollout_step],
+                    "charts/veh_veh_collision_rate": veh_coll_tensor[rollout_step],
+                    "charts/veh_edge_collision_rate": edge_coll_tensor[rollout_step],
+                })
+
+            if args_wandb.track:
+                if rollout_step == 0 and args_wandb.record_video:
+                    movie_frames = np.array(frames, dtype=np.uint8)
+                    wandb.log(
+                        {
+                            "iter": iter,
+                            "scene_videos": wandb.Video(
+                                movie_frames,
+                                fps=args_wandb.render_fps,
+                                caption=f"Training iter: {iter}",
+                            ),
+                        }
+                    )
+                    del movie_frames
+
+        rollouts_done = time.time()
+        logging.info(f'total_rollout_time: {rollouts_done - start_rollout} | per rollout: {(rollouts_done - start_rollout)/args_exp.num_policy_rollouts}')
+
+        wandb.log({"global_iter": iter})
+
         # # # # Compute advantage estimate via GAE on collected experience # # # #
         # Select the last observation for every policy rollout
-        next_obs = obs_tensor[:, last_step, :, :].reshape(-1, observation_space_dim) # (N_steps * N_rollouts, D_obs)
-        next_done = done_tensor[:, last_step, :].reshape(-1) # (N_steps * N_rollouts)
+        #NOTE: Check, I need the last observation for every agent & rollout
+        next_obs = obs_tensor[:, last_step, :, :].reshape(
+            -1, observation_space_dim
+        )  # (N_steps * N_rollouts, D_obs)
+        next_done = done_tensor[:, last_step, :].reshape(-1)  # (N_steps * N_rollouts)
 
         # Flatten over rollout x agent dimension
-        dones = done_tensor.reshape((args_exp.num_steps, MAX_AGENTS * args_exp.num_policy_rollouts))
-        values = value_tensor.reshape((args_exp.num_steps, MAX_AGENTS * args_exp.num_policy_rollouts))
-        rewards = rew_tensor.reshape((args_exp.num_steps, MAX_AGENTS * args_exp.num_policy_rollouts))
+        dones = done_tensor.reshape(
+            (args_exp.num_steps, MAX_AGENTS * args_exp.num_policy_rollouts)
+        )
+        values = value_tensor.reshape(
+            (args_exp.num_steps, MAX_AGENTS * args_exp.num_policy_rollouts)
+        )
+        rewards = rew_tensor.reshape(
+            (args_exp.num_steps, MAX_AGENTS * args_exp.num_policy_rollouts)
+        )
 
         with torch.no_grad():
             next_value = agent.get_value(next_obs).reshape(-1)
-            advantages= torch.zeros((args_exp.num_steps, MAX_AGENTS * args_exp.num_policy_rollouts))
+            advantages = torch.zeros(
+                (args_exp.num_steps, MAX_AGENTS * args_exp.num_policy_rollouts)
+            ).to(device)
             lastgaelam = 0
             for t in reversed(range(args_exp.num_steps)):
                 if t == args_exp.num_steps - 1:
@@ -398,39 +504,48 @@ if __name__ == "__main__":
                 else:
                     nextnonterminal = 1.0 - dones[t + 1]
                     nextvalues = values[t + 1]
+
+                # Compute TD-error
                 delta = (
-                    rewards[t] + args_exp.gamma * nextvalues * nextnonterminal - values[t]
+                    rewards[t]
+                    + args_exp.gamma * nextvalues * nextnonterminal
+                    - values[t]
                 )
+                # Update advantage for timestep
                 advantages[t] = lastgaelam = (
-                    delta + args_exp.gamma * args_exp.gae_lambda * nextnonterminal * lastgaelam
+                    delta
+                    + args_exp.gamma
+                    * args_exp.gae_lambda
+                    * nextnonterminal
+                    * lastgaelam
                 )
             returns = advantages + values
 
-
         # # # #  Optimization   # # # #
-        # Convert the dictionaries to tensors, then flatten over (num_steps x agents)
         b_obs = obs_tensor.reshape(-1, observation_space_dim)
         b_logprobs = logprob_tensor.reshape(-1)
         b_actions = act_tensor.reshape(-1)
         b_advantages = advantages.reshape(-1)
         b_returns = returns.reshape(-1)
         b_values = values.reshape(-1)
-        
+
         # Optimizing the policy and value network
-        # Since in our multi-agent env some agents finsh earlier then others,
+        # Since in our multi-agent env some agents finsh earlier than others,
         # there will be entries without observations. We filter these out, as we
         # only want to train on valid sequences
-        valid_b_inds = (
-            torch.nonzero(torch.any(b_obs != 0, dim=1), as_tuple=False)[:, 0]
-        )
+        valid_b_inds = torch.nonzero(torch.any(b_obs != 0, dim=1), as_tuple=False)[:, 0]
+        
+        logging.info(f'batch_size: {len(valid_b_inds)}')
 
         clipfracs = []
         batch_size = len(valid_b_inds)
         minibatch_size = batch_size // num_agents
+        
+        start_optim = time.time()
+        
         for epoch in range(args_exp.update_epochs):
-            logging.info(f"Epoch: {epoch}")
-            
-            # Shuffle batch indices 
+
+            # Shuffle batch indices
             indices = torch.randperm(valid_b_inds.size(0))
             valid_b_inds = valid_b_inds[indices]
 
@@ -439,10 +554,9 @@ if __name__ == "__main__":
                 mb_inds = valid_b_inds[start:end]
 
                 # COMPUTE KL DIV TO HUMAN ANCHOR POLICY
-                # NOTE: Disabled for now
                 action, log_prob, tau_dist = human_anchor_policy(b_obs[mb_inds])
                 actor_dist = agent.get_policy(b_obs[mb_inds])
-                #kl_div = kl_loss(tau_dist.probs, actor_dist.probs)
+                # kl_div = kl_loss(tau_dist.probs, actor_dist.probs)
 
                 # Check if the minibatch has at least two elements
                 if len(mb_inds) < 2:
@@ -499,43 +613,41 @@ if __name__ == "__main__":
                     pg_loss
                     - args_exp.ent_coef * entropy_loss
                     + args_exp.vf_coef * v_loss
-                    #- args_exp.lam * kl_div
+                    # - args_exp.lam * kl_div 
                 )
-
-                logging.info(f"L = {loss}")
 
                 optimizer.zero_grad()
                 loss.backward()
                 nn.utils.clip_grad_norm_(agent.parameters(), args_exp.max_grad_norm)
-                optimizer.step()
+                optimizer.step() 
 
             if args_exp.target_kl is not None:
                 if approx_kl > args_exp.target_kl:
                     break
-
+        
+        # # # #     End of iteration     # # # #
         y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
-        # var_y = np.var(y_true)
-        # explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
+        var_y = np.var(y_true)
+        #TODO: Check what goes wrong, explained var is negative which can't be the case
+        explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
 
-        # TRY NOT TO MODIFY: record rewards for plotting purposes
-        writer.add_scalar(
-            "charts/learning_rate", optimizer.param_groups[0]["lr"], global_step
-        )
-        writer.add_scalar("losses/loss", loss.item(), global_step)
-        writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
-        writer.add_scalar("losses/policy_loss", pg_loss.item(), global_step)
-        writer.add_scalar(
-            "losses/entropy", entropy_loss.item(), global_step
-        )
-        writer.add_scalar("charts/mean_advantage", b_advantages.mean())
-        writer.add_scalar("losses/old_approx_kl", old_approx_kl.item(), global_step)
-        writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
-        writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
-        logging.info(f"SPS: {int(global_step / (time.time() - start_time))}")
-        logging.info(f"loss: {loss}")
-        writer.add_scalar(
-            "charts/SPS", int(global_step / (time.time() - start_time)), global_step
-        )
+        if args_wandb.track:
+            wandb.log({
+                "global_step": global_step,
+                "charts/b_advantages": wandb.Histogram(b_advantages.cpu().numpy()),
+                "charts/learning_rate": optimizer.param_groups[0]["lr"],
+                "charts/SPS": int(global_step / (time.time() - start_time)),
+                "losses/value_loss": v_loss.item(),
+                "losses/policy_loss": pg_loss.item(),
+                "losses/entropy": entropy_loss.item(),
+                "losses/kl_policy_update": approx_kl.item(),
+                "losses/clipfrac": np.mean(clipfracs),
+                "losses/explained_variance": explained_var,
+            })
 
+        end_optim = time.time()
+        logging.info(f'optim_step_time: {end_optim - start_optim}')
+
+    # # # #    End of run    # # # #
     env.close()
     writer.close()
