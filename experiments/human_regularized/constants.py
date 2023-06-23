@@ -8,7 +8,7 @@ class PPOExperimentConfig:
     torch_deterministic = True        # if toggled, `torch.backends.cudnn.deterministic=False`
     cuda = True                       # if toggled, cuda will be enabled by default
     total_iters: int = 500            # total iterations of the experiments
-    num_policy_rollouts: int = 2     # determines the batch size, the amount of experience to collect before doing an optim step
+    num_policy_rollouts: int = 75     # determines the batch size, the amount of experience to collect before doing an optim step
     num_steps: int = 80               # the number of steps to run in each environment per policy rollout
     learning_rate: float = 2.5e-4     # the learning rate of the optimizer 
     anneal_lr: float = True           # toggle learning rate annealing for policy and value networks
@@ -40,6 +40,7 @@ class WandBSettings:
     track: bool = True
     record_video: bool = False
     render_mode: str = 'whole_scene' # options: whole_scene / agent_view
+    log_every_t: int = 5 # Take a snapshot every T steps
     render_fps: int = 5
     window_size: int = 1200
     draw_target: bool = True

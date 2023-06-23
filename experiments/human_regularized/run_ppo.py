@@ -154,7 +154,7 @@ if __name__ == "__main__":
     if args_wandb.track:
         wandb.init(
             project=args_wandb.project_name,
-            sync_tensorboard=True,
+            #sync_tensorboard=True,
             config=asdict(args_wandb),
             group="nocturne",
             name=run_name,
@@ -197,12 +197,10 @@ if __name__ == "__main__":
     )
 
     global_step = 0
-    start_time = time.time()
     MAX_AGENTS = 2
 
     for iter in range(1, args_exp.total_iters + 1):
-
-        logging.critical(f'iter: {iter}')
+        start_iter = time.time()
 
         # Storage
         obs_tensor = torch.zeros(
@@ -234,7 +232,7 @@ if __name__ == "__main__":
 
         #TODO: Do rollouts on the GPU
         # # # #  Collect experience with current policy  # # # #
-        start_rollout = time.time()
+        start_rollouts = time.time()
         for rollout_step in range(args_exp.num_policy_rollouts):
 
             # Reset environment
@@ -272,7 +270,7 @@ if __name__ == "__main__":
             for step in range(0, args_exp.num_steps):
                 if args_wandb.record_video:
                     # Render env every zeroth rollout
-                    if step % 5 == 0 and rollout_step == 0:
+                    if step % args_wandb.log_every_t == 0 and rollout_step == 0:
                         if args_wandb.render_mode == "whole_scene":
                             render_scene = env.scenario.getImage(
                                 img_width=args_wandb.window_size,
@@ -296,7 +294,6 @@ if __name__ == "__main__":
 
                         frames.append(render_scene.T)
                             
-
                 global_step += 1
 
                 for agent_id in controlled_agents:
@@ -435,15 +432,12 @@ if __name__ == "__main__":
             veh_coll_tensor[rollout_step] /= num_agents
             edge_coll_tensor[rollout_step] /= num_agents
             goal_tensor[rollout_step] /= num_agents
-
-            # Clear buffer for next rollout
-            buffer.clear()
-
-            logging.info(f"Episodic_return: {current_ep_reward}")
-
+            
+            # Logging
             if args_wandb.track:
                 wandb.log({
                     "global_step": global_step,
+                    "global_iter": iter,
                     "charts/num_agents_in_scene": num_agents,
                     "charts/episodic_return": current_ep_reward,
                     "charts/episodic_length": step,
@@ -457,7 +451,6 @@ if __name__ == "__main__":
                     movie_frames = np.array(frames, dtype=np.uint8)
                     wandb.log(
                         {
-                            "iter": iter,
                             "scene_videos": wandb.Video(
                                 movie_frames,
                                 fps=args_wandb.render_fps,
@@ -467,10 +460,11 @@ if __name__ == "__main__":
                     )
                     del movie_frames
 
-        rollouts_done = time.time()
-        logging.info(f'total_rollout_time: {rollouts_done - start_rollout} | per rollout: {(rollouts_done - start_rollout)/args_exp.num_policy_rollouts}')
-
-        wandb.log({"global_iter": iter})
+            # Clear buffer for next scene
+            buffer.clear()
+        
+        # # # # # # END ROLLOUTS # # # # # # 
+        time_rollouts = time.time() - start_rollouts
 
         # # # # Compute advantage estimate via GAE on collected experience # # # #
         # Select the last observation for every policy rollout
@@ -628,15 +622,13 @@ if __name__ == "__main__":
         # # # #     End of iteration     # # # #
         y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
         var_y = np.var(y_true)
-        #TODO: Check what goes wrong, explained var is negative which can't be the case
         explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
-
+        
         if args_wandb.track:
             wandb.log({
                 "global_step": global_step,
                 "charts/b_advantages": wandb.Histogram(b_advantages.cpu().numpy()),
                 "charts/learning_rate": optimizer.param_groups[0]["lr"],
-                "charts/SPS": int(global_step / (time.time() - start_time)),
                 "losses/value_loss": v_loss.item(),
                 "losses/policy_loss": pg_loss.item(),
                 "losses/entropy": entropy_loss.item(),
@@ -645,9 +637,16 @@ if __name__ == "__main__":
                 "losses/explained_variance": explained_var,
             })
 
-        end_optim = time.time()
-        logging.info(f'optim_step_time: {end_optim - start_optim}')
+        # Profiling
+        time_optim = time.time() - start_optim
+        time_iter = time.time() - start_iter
+        if args_wandb.track:
+            wandb.log({
+                "iter": iter,
+                "profiling/rollout_step_frac": time_rollouts/time_iter, 
+                "profiling/optim_step_frac": time_optim/time_iter, 
+            })
 
-    # # # #    End of run    # # # #
+    # # # #     End of run    # # # #
     env.close()
     writer.close()
