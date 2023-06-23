@@ -181,8 +181,8 @@ if __name__ == "__main__":
     observation_space_dim = env.observation_space.shape[0]
     action_space_dim = env.action_space.n
 
-    agent = Agent(env, observation_space_dim, action_space_dim).to(device)
-    optimizer = optim.Adam(agent.parameters(), lr=args_exp.learning_rate, eps=1e-5)
+    ppo_agent = Agent(env, observation_space_dim, action_space_dim).to(device)
+    optimizer = optim.Adam(ppo_agent.parameters(), lr=args_exp.learning_rate, eps=1e-5)
     kl_loss = nn.KLDivLoss(reduction="batchmean")
 
     # Load human anchor policy
@@ -233,6 +233,7 @@ if __name__ == "__main__":
         #TODO: Do rollouts on the GPU
         # # # #  Collect experience with current policy  # # # #
         start_rollouts = time.time()
+        
         for rollout_step in range(args_exp.num_policy_rollouts):
 
             # Reset environment
@@ -318,7 +319,7 @@ if __name__ == "__main__":
 
                     for agent_id in action_dict.keys():
                         # Take an action
-                        action, logprob, _, value = agent.get_action_and_value(
+                        action, logprob, _, value = ppo_agent.get_action_and_value(
                             torch.Tensor(next_obs_dict[agent_id]).to(device)
                         )
                         # Store in buffer
@@ -486,7 +487,7 @@ if __name__ == "__main__":
         )
 
         with torch.no_grad():
-            next_value = agent.get_value(next_obs).reshape(-1)
+            next_value = ppo_agent.get_value(next_obs).reshape(-1)
             advantages = torch.zeros(
                 (args_exp.num_steps, MAX_AGENTS * args_exp.num_policy_rollouts)
             ).to(device)
@@ -549,7 +550,7 @@ if __name__ == "__main__":
 
                 # COMPUTE KL DIV TO HUMAN ANCHOR POLICY
                 action, log_prob, tau_dist = human_anchor_policy(b_obs[mb_inds])
-                actor_dist = agent.get_policy(b_obs[mb_inds])
+                actor_dist = ppo_agent.get_policy(b_obs[mb_inds])
                 # kl_div = kl_loss(tau_dist.probs, actor_dist.probs)
 
                 # Check if the minibatch has at least two elements
@@ -557,7 +558,7 @@ if __name__ == "__main__":
                     continue  # Skip this minibatch and move to the next one
 
                 # Compute new logprobs of state dist
-                _, newlogprob, entropy, newvalue = agent.get_action_and_value(
+                _, newlogprob, entropy, newvalue = ppo_agent.get_action_and_value(
                     b_obs[mb_inds], b_actions.long()[mb_inds]
                 )
 
@@ -612,7 +613,7 @@ if __name__ == "__main__":
 
                 optimizer.zero_grad()
                 loss.backward()
-                nn.utils.clip_grad_norm_(agent.parameters(), args_exp.max_grad_norm)
+                nn.utils.clip_grad_norm_(ppo_agent.parameters(), args_exp.max_grad_norm)
                 optimizer.step() 
 
             if args_exp.target_kl is not None:
