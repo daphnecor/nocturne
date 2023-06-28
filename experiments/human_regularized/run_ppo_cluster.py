@@ -23,11 +23,9 @@ from constants import (
     PPOExperimentConfig,
     WandBSettings,
 )
-<<<<<<< HEAD:experiments/human_regularized/run_ppo_cluster.py
-=======
+
 from dataclasses import asdict, dataclass
 import utils
->>>>>>> 1e9848cf4d866bac10e66aea39c9d7bfb28848a8:experiments/human_regularized/run_ppo.py
 from imit_models import BehavioralCloningAgentJoint
 from rl_models import Agent
 from cfgs.config import set_display_window

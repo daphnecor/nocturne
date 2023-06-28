@@ -75,7 +75,7 @@ rew_cfg:
   shared_reward: False # agents get the collective reward instead of individual rewards
   goal_tolerance: 0.5
   reward_scaling: 10.0 # rescale all the rewards by this value. This can help w/ some learning algorithms
-  collision_penalty: 5
+  collision_penalty: 50
   shaped_goal_distance_scaling: 0.2
   shaped_goal_distance: True
   goal_distance_penalty: False # if shaped_goal_distance is true, then when this is True the goal distance 
