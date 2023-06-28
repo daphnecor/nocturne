@@ -12,20 +12,30 @@ from filters import MeanStdFilter
 from torch.distributions.categorical import Categorical
 from nocturne import Simulation
 
-class BehavioralCloningAgent(nn.Module):
-    """Simple Behavioral Cloning class."""
-    def __init__(self, num_inputs, config, device):
-        super(BehavioralCloningAgent, self).__init__()
-        self.num_states = num_inputs
-        self.hidden_layers = config['hidden_layers']
-        self.actions_discretizations = config['actions_discretizations']
-        self.actions_bounds = config['actions_bounds']
+class BehavioralCloningAgentJoint(nn.Module):
+    """Simple Behavioral Cloning class with a joint action space."""
+
+    def __init__(
+        self, 
+        num_states, 
+        hidden_layers,
+        actions_discretizations,
+        actions_bounds,
+        device, 
+        deterministic=False,
+    ):
+        super(BehavioralCloningAgentJoint, self).__init__()
+        self.num_states = num_states
+        self.hidden_layers = hidden_layers
+        self.actions_discretizations = actions_discretizations
+        self.actions_bounds = actions_bounds
+        self.device = device
+        self.deterministic = deterministic
         
         # Create an action space
         self.action_grids = [
-            torch.linspace(a_min, a_max, a_count, requires_grad=False).to(device)
-                for (a_min, a_max), a_count in zip(
-                    self.actions_bounds, self.actions_discretizations)
+            torch.linspace(a_min, a_max, a_count, requires_grad=False).to(self.device)
+            for (a_min, a_max), a_count in zip(self.actions_bounds, self.actions_discretizations)
         ]
         self._build_model()
 
@@ -34,13 +44,12 @@ class BehavioralCloningAgent(nn.Module):
         
         # Create neural network model
         self.neural_net = nn.Sequential(
-            MeanStdFilter(self.num_states), # Pass states through filter
+            MeanStdFilter(self.num_states),  # Pass states through filter
             nn.Linear(self.num_states, self.hidden_layers[0]),
             nn.Tanh(),
             *[
                 nn.Sequential(
-                    nn.Linear(self.hidden_layers[i],
-                                self.hidden_layers[i + 1]),
+                    nn.Linear(self.hidden_layers[i], self.hidden_layers[i + 1]),
                     nn.Tanh(),
                 ) for i in range(len(self.hidden_layers) - 1)
             ],
@@ -48,39 +57,32 @@ class BehavioralCloningAgent(nn.Module):
         
         # Map model representation to discrete action distributions
         pre_head_size = self.hidden_layers[-1]
-        self.heads = nn.ModuleList([
-            nn.Linear(pre_head_size, discretization)
-            for discretization in self.actions_discretizations
-        ])
+        self.head = nn.Linear(pre_head_size, np.prod(self.actions_discretizations))
 
-    def forward(self, state, deterministic=False):
+    def forward(self, state):
         """Forward pass through the BC model.
 
-            Args:
-                state (Tensor): Input tensor representing the state of the environment.
+        Args:
+            state (Tensor): Input tensor representing the state of the environment.
+            deterministic (bool): Flag indicating whether to choose actions deterministically.
 
-            Returns:
-                Tuple[List[Tensor], List[Tensor], List[Categorical]]: A tuple of three lists:
-                1. A list of tensors representing the actions to take in response to the input state.
-                2. A list of tensors representing the indices of the actions in their corresponding action grids.
-                3. A list of Categorical distributions over the actions.
-            """
-
+        Returns:
+            Tensor: A tensor representing the joint action distribution.
+        """
+            
         # Feed state to nn model
         outputs = self.neural_net(state)
 
-        # Get distribution over every action in action types (acc, steering, head tilt)
-        action_dists_in_state = [Categorical(logits=head(outputs)) for head in self.heads]
+        # Get joint action distribution
+        action_logits = self.head(outputs)
 
-        # Get action indices: Find indexes in actions grids which values 
-        # are the closest to the ground truth actions
-        actions_idx = [dist.logits.argmax(axis=-1) if deterministic else dist.sample()
-                       for dist in action_dists_in_state]
-        
-        # Get action in action grids
-        actions = [
-            action_grid[action_idx] for action_grid, action_idx in zip(
-                self.action_grids, actions_idx)
-        ]
-        
-        return actions, actions_idx, action_dists_in_state
+        # Dist
+        action_dist = Categorical(logits=action_logits)
+
+        if self.deterministic:
+            action_idx = action_logits.argmax(dim=-1)
+        else:
+            action_idx = action_dist.sample()
+
+        # Return action, log_prob, and full distribution
+        return action_idx, action_dist.log_prob(action_idx), action_dist

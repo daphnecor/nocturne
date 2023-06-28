@@ -1,25 +1,69 @@
-from multiprocessing import Process
+# from multiprocessing import Process
 
-def f(name):
-    print('hello', name)
+# def f(name):
+#     print('hello', name)
 
-if __name__ == '__main__':
-    p = Process(target=f, args=('bob',))
-    p.start()
-    p.join()
+# if __name__ == '__main__':
+#     p = Process(target=f, args=('bob',))
+#     p.start()
+#     p.join()
     
-def info(title):
-    print(title)
-    print('module name:', __name__)
-    print('parent process:', os.getppid())
-    print('process id:', os.getpid())
+# def info(title):
+#     print(title)
+#     print('module name:', __name__)
+#     print('parent process:', os.getppid())
+#     print('process id:', os.getpid())
 
-def f(name):
-    info('function f')
-    print('hello', name)
+# def f(name):
+#     info('function f')
+#     print('hello', name)
+
+# if __name__ == '__main__':
+#     info('main line')
+#     p = Process(target=f, args=('bob',))
+#     p.start()
+#     p.join()
+
+
+from multiprocessing import Pool, TimeoutError
+import numpy as np
+import time
+import os
+
+def f(x):
+    return np.random.rand(100_000)
 
 if __name__ == '__main__':
-    info('main line')
-    p = Process(target=f, args=('bob',))
-    p.start()
-    p.join()
+    # start 4 worker processes
+    with Pool(processes=8) as pool:
+
+        # print "[0, 1, 4,..., 81]"
+        print(pool.map(f, range(10)))
+
+        # print same numbers in arbitrary order
+        for i in pool.imap_unordered(f, range(10)):
+            print(i)
+
+        # evaluate "f(20)" asynchronously
+        res = pool.apply_async(f, (20,))      # runs in *only* one process
+        print(res.get(timeout=1))             # prints "400"
+
+        # evaluate "os.getpid()" asynchronously
+        res = pool.apply_async(os.getpid, ()) # runs in *only* one process
+        print(res.get(timeout=1))             # prints the PID of that process
+
+        # launching multiple evaluations asynchronously *may* use more processes
+        multiple_results = [pool.apply_async(os.getpid, ()) for i in range(4)]
+        print([res.get(timeout=1) for res in multiple_results])
+
+        # make a single worker sleep for 10 seconds
+        res = pool.apply_async(time.sleep, (10,))
+        try:
+            print(res.get(timeout=1))
+        except TimeoutError:
+            print("We lacked patience and got a multiprocessing.TimeoutError")
+
+        print("For the moment, the pool remains available for more work")
+
+    # exiting the 'with'-block has stopped the pool
+    print("Now the pool is closed and no longer available")

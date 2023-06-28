@@ -23,7 +23,7 @@ from constants import (
     PPOExperimentConfig,
     WandBSettings,
 )
-from imit_models import BehavioralCloningAgentJoint
+
 from rl_models import Agent
 from cfgs.config import set_display_window
 from nocturne import Action
