@@ -19,6 +19,7 @@ if [ -f "${OVERLAY_FILE}" ]; then
     singularity exec --nv --overlay "${OVERLAY_FILE}:ro" \
         "${SINGULARITY_IMAGE}" \
         /bin/bash
+
 else
     echo "Setting up ${BASE_IMAGE_FILE} with initial overlay ${OVERLAY_FILE}.gz"
 

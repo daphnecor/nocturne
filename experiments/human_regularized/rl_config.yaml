@@ -22,18 +22,18 @@ single_agent_mode: False
 episode_length: 80
 # how many files of the total dataset to use. -1 indicates to use all of them
 num_files: 1 # Can use 1 to test on a single nocturne scene
-scenario_path: '/scratch/dc4971/nocturne/data/formatted_json_v2_no_tl_train/'
+scenario_path: /scratch/dc4971/nocturne/data/formatted_json_v2_no_tl_train
 dt: 0.1
 sims_per_step: 10
 img_as_state: False
 discretize_actions: True
 include_head_angle: False # Whether to include the head tilt/angle as part of a vehicle's action
 accel_discretization: 15
-accel_lower_bound: -6
-accel_upper_bound: 6
+accel_lower_bound: -3
+accel_upper_bound: 2
 steering_lower_bound: -0.7 # corresponds to about 40 degrees of max steering angle
 steering_upper_bound: 0.7 # corresponds to about 40 degrees of max steering angle
-steering_discretization: 43
+steering_discretization: 15 #43
 head_angle_lower_bound: -1.6
 head_angle_upper_bound: 1.6
 head_angle_discretization: 5
@@ -75,7 +75,7 @@ rew_cfg:
   shared_reward: False # agents get the collective reward instead of individual rewards
   goal_tolerance: 0.5
   reward_scaling: 10.0 # rescale all the rewards by this value. This can help w/ some learning algorithms
-  collision_penalty: 0
+  collision_penalty: 5
   shaped_goal_distance_scaling: 0.2
   shaped_goal_distance: True
   goal_distance_penalty: False # if shaped_goal_distance is true, then when this is True the goal distance 
@@ -92,7 +92,7 @@ rew_cfg:
   heading_target: False
   heading_target_tolerance: 0.3
 subscriber:
-  view_angle: 3.14
+  view_angle: 3.14 # Compensate for missing head tilt
   # the distance which the cone extends before agents are not visible
   # TODO(eugenevinitsky) pick the right number
   view_dist: 80
@@ -103,15 +103,15 @@ subscriber:
   # agents in the system is less than max_num_vehicles
   keep_inactive_agents: False
   # for values greater than 1, we will stack inputs together (i.e. memory and equivalent of n_stacked_states)
-  n_frames_stacked: 5
+  n_frames_stacked: 5 # DEFAULT FOR BC = 5
 
-results_dir: /scratch/dc4971/nocturne/results
+results_dir: 
 
 hydra:
   run:
-    dir: /scratch/dc4971/nocturne/results
+    dir: 
   sweep:
-    dir: /scratch/dc4971/nocturne/results
+    dir: 
     subdir: ${hydra.job.num}
   launcher:
     timeout_min: 2880

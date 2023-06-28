@@ -2,6 +2,9 @@ DEV_MODE=true
 PROJECT="nocturne-research"
 NOCTURNE_DIR="/scratch/$USER/nocturne"
 
+#module load /scratch/$USER/openmpi/intel/4.0.5
+module load openmpi/intel/4.0.5
+
 if [ -d "$NOCTURNE_DIR" ]; then
 
     # Install requirements if available

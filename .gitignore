@@ -52,6 +52,7 @@ configs.json
 
 # venv
 venv/*
+test_venv/*
 
 # Ignore all data
 data/*

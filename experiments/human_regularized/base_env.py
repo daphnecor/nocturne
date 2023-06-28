@@ -237,7 +237,6 @@ class BaseEnv(Env):
             if (
                 position_target_achieved
                 and speed_target_achieved
-                and heading_target_achieved
             ):
                 info_dict[veh_id]["goal_achieved"] = True
                 # rew_dict[veh_id] += rew_cfg['goal_achieved_bonus'] / rew_cfg['reward_scaling']
@@ -287,34 +286,34 @@ class BaseEnv(Env):
                             * (1 - np.abs(veh_obj.speed - veh_obj.target_speed) / 40.0)
                             / rew_cfg["reward_scaling"]
                         )
-                if rew_cfg["shaped_goal_distance"] and rew_cfg["heading_target"]:
-                    if rew_cfg["goal_distance_penalty"]:
-                        rew_dict[veh_id] -= (
-                            rew_cfg.get("shaped_goal_distance_scaling", 1.0)
-                            * (
-                                np.abs(
-                                    self.angle_sub(
-                                        veh_obj.heading, veh_obj.target_heading
-                                    )
-                                )
-                                / (2 * np.pi)
-                            )
-                            / rew_cfg["reward_scaling"]
-                        )
-                    else:
-                        rew_dict[veh_id] += (
-                            rew_cfg.get("shaped_goal_distance_scaling", 1.0)
-                            * (
-                                1
-                                - np.abs(
-                                    self.angle_sub(
-                                        veh_obj.heading, veh_obj.target_heading
-                                    )
-                                )
-                                / (2 * np.pi)
-                            )
-                            / rew_cfg["reward_scaling"]
-                        )
+                # if rew_cfg["shaped_goal_distance"] and rew_cfg["heading_target"]:
+                #     if rew_cfg["goal_distance_penalty"]:
+                #         rew_dict[veh_id] -= (
+                #             rew_cfg.get("shaped_goal_distance_scaling", 1.0)
+                #             * (
+                #                 np.abs(
+                #                     self.angle_sub(
+                #                         veh_obj.heading, veh_obj.target_heading
+                #                     )
+                #                 )
+                #                 / (2 * np.pi)
+                #             )
+                #             / rew_cfg["reward_scaling"]
+                #         )
+                #     else:
+                #         rew_dict[veh_id] += (
+                #             rew_cfg.get("shaped_goal_distance_scaling", 1.0)
+                #             * (
+                #                 1
+                #                 - np.abs(
+                #                     self.angle_sub(
+                #                         veh_obj.heading, veh_obj.target_heading
+                #                     )
+                #                 )
+                #                 / (2 * np.pi)
+                #             )
+                #             / rew_cfg["reward_scaling"]
+                #         )
             """############################################
                     Handle potential done conditions
             ############################################"""
@@ -387,17 +386,14 @@ class BaseEnv(Env):
         # all the conditions on a scene that we have
         while not enough_vehicles:
             #NOTE: HARDCODED FOR DEBUGGING
-            #self.file = 'tfrecord-00145-of-01000_267.json' # This file has only 2 agents
-            self.file = 'experiments/human_regularized/example_scenario.json'
+            #self.file = 'tfrecord-00145-of-01000_267.jsonMulti_agent01' # This file has only 2 agents
+            self.file = 'example_scenario.json'
             #NOTE: DEFAULT BELOW
             #self.file = self.files[np.random.randint(len(self.files))]
             self.simulation = Simulation(
-                self.file, config=get_scenario_dict(self.cfg),
+                os.path.join(self.cfg["scenario_path"], self.file),
+                config=get_scenario_dict(self.cfg),
             )
-            # self.simulation = Simulation(
-            #     os.path.join(self.cfg["scenario_path"], self.file),
-            #     config=get_scenario_dict(self.cfg),
-            # )
             self.scenario = self.simulation.getScenario()
             """##################################################################
                 Construct context dictionary of observations that can be used to

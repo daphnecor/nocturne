@@ -7,8 +7,8 @@ from torch.utils.data import DataLoader
 from torch.optim import Adam
 from collections import defaultdict
 
-from examples.imitation_learning import waymo_data_loader 
-from examples.imitation_learning.filters import MeanStdFilter
+import waymo_data_loader 
+from filters import MeanStdFilter
 from torch.distributions.categorical import Categorical
 from nocturne import Simulation
 
