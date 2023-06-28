@@ -1,5 +1,6 @@
 import torch
 
+<<<<<<< HEAD
 
 def render_scene(env, render_mode, window_size, ego_vehicle=None, view_dist=None, view_angle=None, draw_target=True, padding=10.0):
     """
@@ -20,6 +21,13 @@ def render_scene(env, render_mode, window_size, ego_vehicle=None, view_dist=None
     """
 
     if render_mode == "whole_scene":
+=======
+def render_scene(env, render_mode, window_size, ego_vehicle=None, view_dist=None, 
+                 view_angle=None, draw_target=True, padding=10.0):
+
+    if render_mode == "whole_scene":
+
+>>>>>>> 1e9848cf4d866bac10e66aea39c9d7bfb28848a8
         render_scene = env.scenario.getImage(
             img_width=1200,
             img_height=1200,
@@ -28,8 +36,15 @@ def render_scene(env, render_mode, window_size, ego_vehicle=None, view_dist=None
         )
         
     elif render_mode == "agent_view":
+<<<<<<< HEAD
         render_scene = env.scenario.getConeImage(
             source=ego_vehicle,
+=======
+         
+         render_scene = env.scenario.getConeImage(
+            # Select one of the vehicles we are controlling
+            source=ego_vehicle, #env.controlled_vehicles[1], 
+>>>>>>> 1e9848cf4d866bac10e66aea39c9d7bfb28848a8
             view_dist=view_dist,
             view_angle=view_angle,
             head_angle=0,
@@ -43,6 +58,7 @@ def render_scene(env, render_mode, window_size, ego_vehicle=None, view_dist=None
 
 
 def find_last_zero_index(tensor):
+<<<<<<< HEAD
     """
     Finds the index of the last occurrence of zero in each row of a tensor.
 
@@ -53,6 +69,8 @@ def find_last_zero_index(tensor):
         torch.Tensor: The indices of the last occurrence of zero in each row.
     """
 
+=======
+>>>>>>> 1e9848cf4d866bac10e66aea39c9d7bfb28848a8
     num_items, num_steps = tensor.shape
     last_zero_indices = torch.zeros(num_items, dtype=torch.long)
     
@@ -66,6 +84,7 @@ def find_last_zero_index(tensor):
         if not found_zero:
             last_zero_indices[i] = -1
     
+<<<<<<< HEAD
     return last_zero_indices
 
 
@@ -132,3 +151,6 @@ class RolloutBuffer:
             self.rewards[key].zero_()
             self.dones[key].zero_()
             self.values[key].zero_()
+=======
+    return last_zero_indices
+>>>>>>> 1e9848cf4d866bac10e66aea39c9d7bfb28848a8
