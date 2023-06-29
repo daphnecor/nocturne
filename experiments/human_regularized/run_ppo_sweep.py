@@ -564,7 +564,7 @@ if __name__ == "__main__":
     RL_SETTINGS_PATH = "experiments/human_regularized/rl_config.yaml"
     SWEEP_NAME = "ppo_sweeps"
     TOTAL_RUNS = 10
-    SAVE_MODEL_FREQ = 1
+    SAVE_MODEL_FREQ = 25
 
     # Define the search space
     sweep_configuration = {  
@@ -572,11 +572,11 @@ if __name__ == "__main__":
         'metric': {'goal': 'minimize', 'name': 'surrogate_loss'},  
         'parameters': {  
             'collision_penalty': { 'values': [0, 10, 20, 50]}, 
-            'num_rollouts': { 'values': [60, 70, 80, 90, 100]}, # Batch size
-            'total_iters': {'values': [1]}, # Total number of iterations
+            'num_rollouts': { 'values': [60, 70, 80, 90, 100]},     # Batch size
+            'total_iters': {'values': [400]},                       # Total number of iterations
             'learning_rate': { 'values': [1e-5, 5e-5, 1e-4, 5e-4]},  
-            'ent_coef': { 'values': [0.0, 0.01]},  # Entropy coefficient
-            'vf_coef': { 'values': [0.5, 0.25, 0.1]}, # Value function coefficient
+            'ent_coef': { 'values': [0.0, 0.01]},                   # Entropy coefficient
+            'vf_coef': { 'values': [0.5, 0.25, 0.1]},               # Value function coefficient
         }  
     }
 
