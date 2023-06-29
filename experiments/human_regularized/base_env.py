@@ -21,7 +21,6 @@ from nocturne import Action, Simulation
 
 class BaseEnv(Env):
     """
-    
     This is the Nocturne base environment.
     """
 
@@ -61,6 +60,7 @@ class BaseEnv(Env):
         self.t = 0
         self.step_num = 0
         self.rank = rank
+        self.collision_penalty = self.cfg["rew_cfg"]["collision_penalty"]
         self.seed(cfg["seed"])
         obs_dict = self.reset()
         self.observation_space = Box(
@@ -329,7 +329,7 @@ class BaseEnv(Env):
                 if int(veh_obj.collision_type) == 2:
                     info_dict[veh_id]["veh_edge_collision"] = True
                 rew_dict[veh_id] -= (
-                    np.abs(rew_cfg["collision_penalty"]) / rew_cfg["reward_scaling"]
+                    np.abs(self.collision_penalty) / rew_cfg["reward_scaling"]
                 )
                 if self.cfg.get("remove_at_collide", True):
                     done_dict[veh_id] = True

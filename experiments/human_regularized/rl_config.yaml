@@ -1,7 +1,6 @@
 seed: 0
 device: 'cuda:0'
 debug: False
-experiment: intersection
 env: my_custom_multi_env_v1 # name of the env, hardcoded for now
 
 # one of the agents will be randomly tagged as the 
