@@ -1,7 +1,3 @@
-defaults:
-  - algorithm: ppo
-  - override hydra/launcher: submitit_local
-
 seed: 0
 device: 'cuda:0'
 debug: False

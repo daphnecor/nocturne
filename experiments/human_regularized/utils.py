@@ -1,4 +1,5 @@
 import torch
+import yaml
 
 def render_scene(env, render_mode, window_size, ego_vehicle=None, view_dist=None, view_angle=None, draw_target=True, padding=10.0):
     """
@@ -131,3 +132,16 @@ class RolloutBuffer:
             self.rewards[key].zero_()
             self.dones[key].zero_()
             self.values[key].zero_()
+
+
+def load_yaml_file(config_path):
+    try:
+        with open(config_path, "r") as stream:
+            rl_config = yaml.safe_load(stream)
+    except FileNotFoundError:
+        print(f"File not found: {config_path}")
+        return None
+    except yaml.YAMLError as e:
+        print(f"Error while parsing YAML file: {e}")
+        return None
+    return rl_config

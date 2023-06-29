@@ -19,7 +19,6 @@ import wandb
 from base_env import BaseEnv
 from constants import (
     HumanPolicyConfig,
-    NocturneConfig,
     PPOExperimentConfig,
     WandBSettings,
 )
@@ -32,14 +31,14 @@ from dataclasses import asdict, dataclass
 
 logging.basicConfig(level=logging.INFO)
 
+RL_SETTINGS_PATH = "experiments/human_regularized/rl_config.yaml"
+
 
 def make_env(config_path, seed):
     """Make nocturne environment."""
-    with open(config_path, "r") as stream:
-        base_env_config = yaml.safe_load(stream)
     env = BaseEnv(base_env_config)
     env.seed(seed)
-    return base_env_config, env
+    return env
 
 
 if __name__ == "__main__":
@@ -47,30 +46,23 @@ if __name__ == "__main__":
     # Configs
     args_exp = PPOExperimentConfig()
     args_wandb = WandBSettings()
-    args_env = NocturneConfig()
     args_human_pol = HumanPolicyConfig()
+    args_rl_env = utils.load_yaml_file(RL_SETTINGS_PATH)
 
-    rl_config, env = make_env(args_env.nocturne_rl_cfg, args_exp.seed)
+    combined_dict = {**args_rl_env, **asdict(args_exp)}
 
     # Log
     now = datetime.datetime.now()
     formatted_time = now.strftime("%D%H%M")
-    run_name = f"{args_env.env_id}__{args_wandb.exp_name}_{formatted_time}"
-
-    # Combine configs to log it all
-    configs = {
-        'ppo_setup': asdict(args_exp),
-        'rl_setup': rl_config,
-    }
+    run_name = f"Nocturne-v0__{args_wandb.exp_name}_{formatted_time}"
 
     if args_wandb.track:
         run = wandb.init(
             project=args_wandb.project_name,
-            config=configs,
+            config=combined_dict,
             group=args_wandb.group,
             name=run_name,
             save_code=True,
-            magic=True,
         )
 
     # Seed
@@ -86,6 +78,7 @@ if __name__ == "__main__":
     logging.critical(f"DEVICE: {device}")
 
     # Environment setup
+    env = BaseEnv(args_rl_env)
     set_display_window()
 
     obs_space_dim = env.observation_space.shape[0]
@@ -549,7 +542,7 @@ if __name__ == "__main__":
 
         # Save model checkpoint in wandb directory
         if iter % 25 == 0 and args_wandb.track and args_exp.save_model:
-            model_path = os.path.join(wandb.run.dir, f"{args_env.env_id}_ppo.pt")
+            model_path = os.path.join(wandb.run.dir, f"Nocturne-v0_ppo.pt")
             torch.save(
                 obj={
                     "iter": iter,

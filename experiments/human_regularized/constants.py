@@ -31,17 +31,6 @@ class PPOExperimentConfig:
 
 
 @dataclass
-class NocturneConfig:
-    env_id: str = "Nocturne-v0"
-    nocturne_rl_cfg: str = "experiments/human_regularized/rl_config.yaml"
-    view_dist: float = 80
-    view_angle: float = 3.14
-    train_data_dir: str = None
-    valid_data_dir: str = None
-    test_split: float = None
-
-
-@dataclass
 class WandBSettings:
     track: bool = True
     record_video: bool = False
@@ -51,7 +40,7 @@ class WandBSettings:
     render_fps: int = 5
     window_size:int = 1000
     draw_target: bool = True
-    project_name: str = "tests_ppo"
+    project_name: str = "test_ppo"
     group: str = "debug"
     exp_name: str = "test_configs" #"ppo_mem_5_penal_coll_5"
 
