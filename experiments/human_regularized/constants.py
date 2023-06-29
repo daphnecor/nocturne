@@ -9,8 +9,8 @@ class PPOExperimentConfig:
     seed: int = 12                    # seed of the experiment
     torch_deterministic = True        # if toggled, `torch.backends.cudnn.deterministic=False`
     cuda = True                       # if toggled, cuda will be enabled by default
-    total_iters: int = 3000           # total iterations of the experiments
-    num_policy_rollouts: int = 90     # determines the batch size, the amount of experience to collect before doing an optim step
+    total_iters: int = 10 #3000           # total iterations of the experiments
+    num_policy_rollouts: int = 10 #90     # determines the batch size, the amount of experience to collect before doing an optim step
     num_steps: int = 90               # the number of steps to run in each environment per policy rollout
     learning_rate: float = 1e-4       # the learning rate of the optimizer 
     anneal_lr: float = True           # toggle learning rate annealing for policy and value networks
@@ -51,9 +51,9 @@ class WandBSettings:
     render_fps: int = 5
     window_size:int = 1000
     draw_target: bool = True
-    project_name: str = "test_ppo"
-    group: str = "sweep"
-    exp_name: str = "ppo_mem_5_penal_coll_5"
+    project_name: str = "tests_ppo"
+    group: str = "debug"
+    exp_name: str = "test_configs" #"ppo_mem_5_penal_coll_5"
 
 
 @dataclass

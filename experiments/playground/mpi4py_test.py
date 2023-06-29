@@ -19,10 +19,10 @@ def sequential_policy_rollouts(num_rollouts):
     return rollout_results
 
 if __name__ == '__main__':
-    num_rollouts = 10
+    num_rollouts = 1000
 
     # Parallel execution using multiprocessing.Pool
-    with Pool(processes=8) as pool:
+    with Pool() as pool:
         parallel_start_time = time.perf_counter()
         parallel_rollout_results = [pool.apply_async(do_policy_rollout) for _ in range(num_rollouts)]
         parallel_results = [res.get() for res in parallel_rollout_results]

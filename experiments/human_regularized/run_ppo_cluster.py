@@ -24,9 +24,6 @@ from constants import (
     WandBSettings,
 )
 
-from dataclasses import asdict, dataclass
-import utils
-from imit_models import BehavioralCloningAgentJoint
 from rl_models import Agent
 from cfgs.config import set_display_window
 from nocturne import Action
@@ -42,28 +39,38 @@ def make_env(config_path, seed):
         base_env_config = yaml.safe_load(stream)
     env = BaseEnv(base_env_config)
     env.seed(seed)
-    return env
+    return base_env_config, env
 
 
 if __name__ == "__main__":
+
     # Configs
     args_exp = PPOExperimentConfig()
     args_wandb = WandBSettings()
     args_env = NocturneConfig()
     args_human_pol = HumanPolicyConfig()
 
+    rl_config, env = make_env(args_env.nocturne_rl_cfg, args_exp.seed)
+
     # Log
     now = datetime.datetime.now()
     formatted_time = now.strftime("%D%H%M")
     run_name = f"{args_env.env_id}__{args_wandb.exp_name}_{formatted_time}"
 
+    # Combine configs to log it all
+    configs = {
+        'ppo_setup': asdict(args_exp),
+        'rl_setup': rl_config,
+    }
+
     if args_wandb.track:
         run = wandb.init(
             project=args_wandb.project_name,
-            config=asdict(args_exp),
+            config=configs,
             group=args_wandb.group,
             name=run_name,
             save_code=True,
+            magic=True,
         )
 
     # Seed
@@ -80,7 +87,6 @@ if __name__ == "__main__":
 
     # Environment setup
     set_display_window()
-    env = make_env(args_env.nocturne_rl_cfg, args_exp.seed)
 
     obs_space_dim = env.observation_space.shape[0]
     act_space_dim = env.action_space.n
@@ -171,7 +177,6 @@ if __name__ == "__main__":
             # # # #  Interact with environment  # # # #
             start_env = time.time()
             for step in range(0, args_exp.num_steps):
-<<<<<<< HEAD:experiments/human_regularized/run_ppo_cluster.py
                 # Render env every zeroth rollout, every k iterations
                 if args_wandb.record_video:
                     if (
@@ -181,24 +186,12 @@ if __name__ == "__main__":
                     ):
                         scene_frame = utils.render_scene(
                             env=env,
-=======
-            
-                # Render env every zeroth rollout, every k iterations
-                if args_wandb.record_video:
-                    if iter % args_wandb.log_every_t_iters == 0 and step % args_wandb.log_every_t_steps == 0 and rollout_step == 0:
-                        scene_frame = utils.render_scene(
-                            env=env, 
->>>>>>> 1e9848cf4d866bac10e66aea39c9d7bfb28848a8:experiments/human_regularized/run_ppo.py
                             render_mode=args_wandb.render_mode,
                             window_size=args_wandb.window_size,
                         )
                         frames.append(scene_frame)
-<<<<<<< HEAD:experiments/human_regularized/run_ppo_cluster.py
                         del scene_frame
 
-=======
-                
->>>>>>> 1e9848cf4d866bac10e66aea39c9d7bfb28848a8:experiments/human_regularized/run_ppo.py
                 global_step += 1 * num_agents
 
                 # Store dones and observations for active agents
@@ -212,12 +205,7 @@ if __name__ == "__main__":
                         continue
 
                 # Use policy network to select an action for every agent based
-<<<<<<< HEAD:experiments/human_regularized/run_ppo_cluster.py
                 # on current observation
-=======
-                # on current observation 
-                #TODO: convert to util function
->>>>>>> 1e9848cf4d866bac10e66aea39c9d7bfb28848a8:experiments/human_regularized/run_ppo.py
                 with torch.no_grad():
                     action_dict = {
                         agent_id: None
@@ -237,37 +225,11 @@ if __name__ == "__main__":
                         # Store in action_dict
                         action_dict[agent_id] = action.item()
 
-<<<<<<< HEAD:experiments/human_regularized/run_ppo_cluster.py
-=======
-                if args_env.take_random_actions:
-                    # Sanity check A: If activated, agents take random actions
-                    accel_interval = np.array([-6, 6])
-                    steer_interval = np.array([-1, 1])
-                    action_dict = {
-                        agent_id: Action(
-                            acceleration=np.random.choice(accel_interval, size=1),
-                            steering=np.random.choice(steer_interval, size=1),
-                        )
-                        for agent_id in controlled_agents
-                        if agent_id not in already_done_ids
-                    }
-
-                    # Sanity check B: take fixed actions
-                    # action_dict = {
-                    #     veh.id: Action(acceleration=2.0, steering=1.0)
-                    #     for veh in moving_vehs
-                    # }
-
->>>>>>> 1e9848cf4d866bac10e66aea39c9d7bfb28848a8:experiments/human_regularized/run_ppo.py
                 # Take simultaneous action in env
                 next_obs_dict, reward_dict, next_done_dict, info_dict = env.step(
                     action_dict
                 )
-<<<<<<< HEAD:experiments/human_regularized/run_ppo_cluster.py
                 
-=======
-
->>>>>>> 1e9848cf4d866bac10e66aea39c9d7bfb28848a8:experiments/human_regularized/run_ppo.py
                 # Sanity check: log (x, y) coordinates for both vehicles
                 if args_wandb.track:
                     for veh in env.controlled_vehicles:
@@ -311,14 +273,8 @@ if __name__ == "__main__":
 
                 # End the game early if all agents are done
                 if len(already_done_ids) == num_agents or step == args_exp.num_steps:
-<<<<<<< HEAD:experiments/human_regularized/run_ppo_cluster.py
                     break
 
-=======
-                    logging.info(f'agent_done_early!')
-                    break
-    
->>>>>>> 1e9848cf4d866bac10e66aea39c9d7bfb28848a8:experiments/human_regularized/run_ppo.py
             # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
             # Store rollout scene experience
@@ -348,7 +304,6 @@ if __name__ == "__main__":
 
             # Logging
             if args_wandb.track:
-<<<<<<< HEAD:experiments/human_regularized/run_ppo_cluster.py
                 wandb.log(
                     {
                         "global_step": global_step,
@@ -371,22 +326,6 @@ if __name__ == "__main__":
                     and rollout_step == 0
                     and args_wandb.record_video
                 ):
-=======
-                wandb.log({
-                    "global_step": global_step,
-                    "global_iter": iter,
-                    "charts/num_agents_in_scene": num_agents,
-                    "charts/total_episodic_return": current_ep_reward,
-                    "charts/agent_3_episodic_return": current_ep_rew_agents[3],
-                    "charts/agent_32_episodic_return": current_ep_rew_agents[32],
-                    "charts/episodic_length": step,
-                    "charts/goal_achieved_rate": goal_tensor[rollout_step],
-                    "charts/veh_veh_collision_rate": veh_coll_tensor[rollout_step],
-                    "charts/veh_edge_collision_rate": edge_coll_tensor[rollout_step],
-                })
-
-                if iter % args_wandb.log_every_t_iters == 0 and rollout_step == 0 and args_wandb.record_video:
->>>>>>> 1e9848cf4d866bac10e66aea39c9d7bfb28848a8:experiments/human_regularized/run_ppo.py
                     movie_frames = np.array(frames, dtype=np.uint8)
                     wandb.log(
                         {
@@ -399,7 +338,6 @@ if __name__ == "__main__":
                     )
                     del movie_frames
 
-
             # Clear buffer for next scene
             buffer.clear()
 
@@ -408,7 +346,6 @@ if __name__ == "__main__":
 
         # # # # Compute advantage estimate via GAE on collected experience # # # #
         # Flatten along the num_agents x policy rollout steps axes
-<<<<<<< HEAD:experiments/human_regularized/run_ppo_cluster.py
         dones = done_tensor.permute(0, 2, 1).reshape(
             num_agents * args_exp.num_policy_rollouts, args_exp.num_steps
         ).to(device)
@@ -446,21 +383,6 @@ if __name__ == "__main__":
         # Assumption: all agents are done after 80 steps, even if they haven't
         # reached their target
         next_done = torch.ones(size=(num_agents * args_exp.num_policy_rollouts,)).to(device)
-=======
-        dones = done_tensor.permute(0, 2, 1).reshape(num_agents * args_exp.num_policy_rollouts, args_exp.num_steps)
-        values = value_tensor.permute(0, 2, 1).reshape(num_agents * args_exp.num_policy_rollouts, args_exp.num_steps)
-        rewards = rew_tensor.permute(0, 2, 1).reshape(num_agents * args_exp.num_policy_rollouts, args_exp.num_steps)
-        logprobs = logprob_tensor.permute(0, 2, 1).reshape(num_agents * args_exp.num_policy_rollouts, args_exp.num_steps)
-        actions = act_tensor.permute(0, 2, 1).reshape(num_agents * args_exp.num_policy_rollouts, args_exp.num_steps)
-
-        obs_flat = obs_tensor.permute(0, 2, 1, 3).reshape(num_agents * args_exp.num_policy_rollouts, args_exp.num_steps, observation_space_dim)
-        dones_flat = done_tensor.permute(0, 2, 1).reshape(num_agents * args_exp.num_policy_rollouts, args_exp.num_steps)
-
-        # Select the most recent observation for every policy rollout and agent
-        last_step_alive = utils.find_last_zero_index(dones)
-        next_obs = torch.stack([obs_flat[idx, last_step_alive[idx], :] for idx in range(len(last_step_alive))])
-        next_done = torch.stack([dones[idx, last_step_alive[idx]] for idx in range(len(last_step_alive))])
->>>>>>> 1e9848cf4d866bac10e66aea39c9d7bfb28848a8:experiments/human_regularized/run_ppo.py
 
         with torch.no_grad():
             next_value = ppo_agent.get_value(next_obs).reshape(-1).to(device)
@@ -483,11 +405,7 @@ if __name__ == "__main__":
                     - values[:, t]
                 )
                 # Update advantage for timestep
-<<<<<<< HEAD:experiments/human_regularized/run_ppo_cluster.py
                 lastgaelam = (
-=======
-                advantages[:, t] = lastgaelam = (
->>>>>>> 1e9848cf4d866bac10e66aea39c9d7bfb28848a8:experiments/human_regularized/run_ppo.py
                     delta
                     + args_exp.gamma
                     * args_exp.gae_lambda
@@ -497,41 +415,21 @@ if __name__ == "__main__":
                 advantages[:, t] = lastgaelam
             returns = advantages + values
 
-<<<<<<< HEAD:experiments/human_regularized/run_ppo_cluster.py
         # Filter out invalid indices
         valid_samples_idx = torch.nonzero(dones_flat != 1, as_tuple=False)
         batch_size = len(valid_samples_idx)
 
-=======
-
-        # Filter out invalid indices
-        valid_samples_idx = torch.nonzero(dones_flat != 1, as_tuple=False)
-        batch_size = len(valid_samples_idx)
-        
-        if args_wandb.track:
-            wandb.log({"batch_size": batch_size})
-
->>>>>>> 1e9848cf4d866bac10e66aea39c9d7bfb28848a8:experiments/human_regularized/run_ppo.py
         b_obs = obs_flat[valid_samples_idx[:, 0], valid_samples_idx[:, 1], :]
         b_logprobs = logprobs[valid_samples_idx[:, 0], valid_samples_idx[:, 1]]
         b_actions = actions[valid_samples_idx[:, 0], valid_samples_idx[:, 1]]
         b_advantages = advantages[valid_samples_idx[:, 0], valid_samples_idx[:, 1]]
         b_returns = returns[valid_samples_idx[:, 0], valid_samples_idx[:, 1]]
         b_values = values[valid_samples_idx[:, 0], valid_samples_idx[:, 1]]
-<<<<<<< HEAD:experiments/human_regularized/run_ppo_cluster.py
 
         b_inds = np.arange(batch_size)
         clipfracs = []
         minibatch_size = batch_size // num_agents
         if args_wandb.track: wandb.log({"batch_size": batch_size})
-=======
-        
-         # # # #  Optimization   # # # #
-        b_inds = np.arange(batch_size)
-        clipfracs = []
-        minibatch_size = batch_size // 10
-        
->>>>>>> 1e9848cf4d866bac10e66aea39c9d7bfb28848a8:experiments/human_regularized/run_ppo.py
         start_optim = time.time()
 
         # # # #  Optimization   # # # #
@@ -619,7 +517,6 @@ if __name__ == "__main__":
 
         # Logging
         y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
-<<<<<<< HEAD:experiments/human_regularized/run_ppo_cluster.py
         explained_var = np.nan if np.var(y_true) == 0 else 1 - (np.var(y_true - y_pred)) / np.var(y_true)
 
         if args_wandb.track:
@@ -637,24 +534,6 @@ if __name__ == "__main__":
                     "losses/explained_variance": explained_var,
                 }
             )
-=======
-        var_y = np.var(y_true)
-        explained_var = np.nan if var_y == 0 else 1 - (np.var(y_true - y_pred)) / var_y
-        
-        if args_wandb.track:
-            wandb.log({
-                "global_step": global_step,
-                "charts/b_advantages": wandb.Histogram(b_advantages.cpu().numpy()),
-                "charts/b_advantages_mean": b_advantages.mean(), 
-                "charts/learning_rate": optimizer.param_groups[0]["lr"],
-                "losses/value_loss": v_loss.item(),
-                "losses/policy_loss": pg_loss.item(),
-                "losses/entropy": entropy_loss.item(),
-                "losses/kl_policy_update": approx_kl.item(),
-                "losses/clipfrac": np.mean(clipfracs),
-                "losses/explained_variance": explained_var,
-            })
->>>>>>> 1e9848cf4d866bac10e66aea39c9d7bfb28848a8:experiments/human_regularized/run_ppo.py
 
         # Profiling
         time_optim = time.time() - start_optim
@@ -683,6 +562,7 @@ if __name__ == "__main__":
                 f=model_path,
             )
             logging.critical(f"\nSaved model at {model_path}")
+
 
     # # # #     End of run    # # # #
     env.close()

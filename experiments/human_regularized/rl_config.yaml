@@ -8,12 +8,6 @@ debug: False
 experiment: intersection
 env: my_custom_multi_env_v1 # name of the env, hardcoded for now
 
-# WANDB things
-wandb: False
-wandb_project: nocturne
-wandb_id: null
-wandb_group: ${experiment}
-
 # one of the agents will be randomly tagged as the 
 # agent that we control, the rest of the agents will
 # replay trajectories
@@ -104,20 +98,3 @@ subscriber:
   keep_inactive_agents: False
   # for values greater than 1, we will stack inputs together (i.e. memory and equivalent of n_stacked_states)
   n_frames_stacked: 5 # DEFAULT FOR BC = 5
-
-results_dir: 
-
-hydra:
-  run:
-    dir: 
-  sweep:
-    dir: 
-    subdir: ${hydra.job.num}
-  launcher:
-    timeout_min: 2880
-    cpus_per_task: 10
-    gpus_per_node: 1
-    tasks_per_node: 1
-    mem_gb: 160
-    nodes: 1
-    submitit_folder: ${results_dir}/sweep/${now:%Y.%m.%d}/${now:%H%M}_${experiment}/.slurm
