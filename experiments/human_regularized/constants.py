@@ -9,8 +9,8 @@ class PPOExperimentConfig:
     seed: int = 12                    # seed of the experiment
     torch_deterministic = True        # if toggled, `torch.backends.cudnn.deterministic=False`
     cuda = True                       # if toggled, cuda will be enabled by default
-    total_iters: int = 500            # total iterations of the experiments
-    num_policy_rollouts: int = 90  # determines the batch size, the amount of experience to collect before doing an optim step
+    total_iters: int = 2 #500            # total iterations of the experiments
+    num_policy_rollouts: int = 20 # 90  # determines the batch size, the amount of experience to collect before doing an optim step
     num_steps: int = 90               # the number of steps to run in each environment per policy rollout
     learning_rate: float = 1e-4       # the learning rate of the optimizer 
     anneal_lr: float = True           # toggle learning rate annealing for policy and value networks
@@ -26,12 +26,15 @@ class PPOExperimentConfig:
     human_kl_lam: float = 0           # coefficient of kl_div to human anchor policy
     target_kl: float = None           # the target KL divergence threshold
     save_model: bool = True           # save policy and value networks
+    device: str = None
+    max_agents: int = 2
+    num_processes: int = 2
     # fmt: on
 
 
 @dataclass
 class WandBSettings:
-    track: bool = True
+    track: bool = False
     record_video: bool = False
     render_mode: str = "whole_scene"  # options: whole_scene / agent_view
     log_every_t_iters: int = 20
@@ -41,7 +44,7 @@ class WandBSettings:
     draw_target: bool = True
     project_name: str = "test_ppo"
     group: str = "debug"
-    exp_name: str = "test_configs" #"ppo_mem_5_penal_coll_5"
+    exp_name: str = "test_multiprocessing" #"ppo_mem_5_penal_coll_5"
 
 
 @dataclass

@@ -11,7 +11,7 @@ def set_seed_everywhere(seed):
     random.seed(seed)
 
 
-def find_nearest_grid_idx(action_grids, actions):
+def find_nearest_grid_idx(action_grid, action):
     """
     Convert a batch of actions values to a batch of the nearest action indexes (for discrete actions only).
     credits https://stackoverflow.com/a/46184652/16207351
@@ -22,22 +22,28 @@ def find_nearest_grid_idx(action_grids, actions):
     Returns:
         Tensor: A tensor of size (batch_size, num_actions) with the indices of the nearest action in the action grids.
     """
-    output = torch.zeros_like(actions)
-    for i, action_grid in enumerate(action_grids):
-        action = actions[:, i]
+    action_grid = torch.Tensor(action_grid)
 
-        # get indexes where actions would be inserted in action_grid to keep it sorted
-        idxs = torch.searchsorted(action_grid, action)
+    # get indexes where actions would be inserted in action_grid to keep it sorted
+    idxs = torch.searchsorted(action_grid, float(action))
 
-        # if it would be inserted at the end, we're looking at the last action
-        idxs[idxs == len(action_grid)] -= 1
+    # if it would be inserted at the end, we're looking at the last action
+    idxs[idxs == len(action_grid)] -= 1
 
-        # find indexes where previous index is closer (simple grid has constant sampling intervals)
-        idxs[action_grid[idxs] - action > torch.diff(action_grid).mean() * 0.5] -= 1
+    # find indexes where previous index is closer (simple grid has constant sampling intervals)
+    idxs[action_grid[idxs] - action > torch.diff(action_grid).mean() * 0.5] -= 1
 
-        # write indexes in output
-        output[:, i] = idxs
-    return output
+    return idxs
+
+
+def find_closest_index(action_grid, action):
+    # Calculate the absolute difference between each element in the array and the given value
+    differences = np.abs(action_grid - action)
+    
+    # Find the index of the minimum difference
+    closest_index = np.argmin(differences)
+    
+    return closest_index
 
 
 def compute_log_prob(action_dists, ground_truth_action, action_grids, reduction='mean', return_indexes=False):

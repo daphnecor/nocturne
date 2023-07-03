@@ -59,6 +59,10 @@ class BehavioralCloningAgentJoint(nn.Module):
         pre_head_size = self.hidden_layers[-1]
         self.head = nn.Linear(pre_head_size, np.prod(self.actions_discretizations))
 
+    def get_log_probs(self, expert_actions):
+        """Return log probabilities of pi(expert_actions | state)"""
+        return self.action_dist.log_prob(expert_actions)
+
     def forward(self, state):
         """Forward pass through the BC model.
 
@@ -77,12 +81,12 @@ class BehavioralCloningAgentJoint(nn.Module):
         action_logits = self.head(outputs)
 
         # Dist
-        action_dist = Categorical(logits=action_logits)
+        self.action_dist = Categorical(logits=action_logits)
 
         if self.deterministic:
             action_idx = action_logits.argmax(dim=-1)
         else:
-            action_idx = action_dist.sample()
+            action_idx = self.action_dist.sample()
 
-        # Return action, log_prob, and full distribution
-        return action_idx, action_dist.log_prob(action_idx), action_dist
+        # Return action distribution in state
+        return action_idx, self.action_dist

@@ -41,9 +41,7 @@ def main():
     combined_dict = {**args_rl_env, **asdict(args_exp)}
 
     # Initialize run
-    run = wandb.init(
-        config=combined_dict,
-    )
+    run = wandb.init()
 
     # Get sweep params
     NUM_ROLLOUTS = wandb.config.num_rollouts

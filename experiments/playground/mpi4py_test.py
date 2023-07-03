@@ -3,14 +3,24 @@ import numpy as np
 import time
 import os
 
+# def do_policy_rollout():
+#     process_id = os.getpid()
+#     start_time = time.perf_counter()
+#     # Your code for policy rollout here
+#     rollout_data = np.random.rand(1000000)  # Example rollout data
+#     end_time = time.perf_counter()
+#     duration = end_time - start_time
+#     return rollout_data, duration, process_id
+
 def do_policy_rollout():
     process_id = os.getpid()
     start_time = time.perf_counter()
     # Your code for policy rollout here
-    rollout_data = np.random.rand(1000000)  # Example rollout data
+    for _ in range(50):
+        rollout_data = np.random.rand(100000)  # Example rollout data
     end_time = time.perf_counter()
     duration = end_time - start_time
-    return rollout_data, duration, process_id
+    return duration, process_id
 
 def sequential_policy_rollouts(num_rollouts):
     rollout_results = []
@@ -47,5 +57,5 @@ if __name__ == '__main__':
 
     # Print process IDs for each rollout in parallel execution
     print("Process IDs:")
-    for _, _, process_id in parallel_results:
+    for _, process_id in parallel_results:
         print(process_id)

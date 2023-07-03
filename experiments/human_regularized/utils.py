@@ -1,5 +1,7 @@
-import torch
+from typing import List
 import yaml
+
+import torch
 
 def render_scene(env, render_mode, window_size, ego_vehicle=None, view_dist=None, view_angle=None, draw_target=True, padding=10.0):
     """
@@ -92,7 +94,6 @@ class RolloutBuffer:
     Shared rollout buffer to store collected trajectories for every agent we control.
     Must be reset after the policy network is updated.
     """
-
     def __init__(
         self, controlled_agents, num_steps, obs_space_dim, act_space_dim, device
     ):
@@ -144,4 +145,4 @@ def load_yaml_file(config_path):
     except yaml.YAMLError as e:
         print(f"Error while parsing YAML file: {e}")
         return None
-    return rl_config
+    return dict(rl_config)

@@ -5,31 +5,50 @@
 """Dataloader for imitation learning in Nocturne."""
 from collections import defaultdict
 import random
-
+from torch.utils.data import DataLoader
+import utils
 import torch
 from pathlib import Path
 import numpy as np
 
 from cfgs.config import ERR_VAL
 from nocturne import Simulation
+from behavioral_sweep_config import BehavioralCloningSettings, scenario_config
+import logging
 
+logging.basicConfig(level=logging.INFO)
 
-def _get_waymo_iterator(paths, dataloader_config, scenario_config):
-    # if worker has no paths, return an empty iterator
+def _get_waymo_iterator(paths, data_config, scenario_config):
+    
+    # If worker has no paths, return an empty iterator
     if len(paths) == 0:
         return
+    
+    if data_config['joint_act_space']:
+        # Create action grids 
+        accel_grid = np.linspace(
+                data_config['accel_lb'], data_config['accel_ub'], data_config['accel_disc']
+        )
+        steer_grid = np.linspace(
+                data_config['steering_lb'], data_config['steering_ub'], data_config['steering_disc']
+        )
 
-    # load dataloader config
-    tmin = dataloader_config.get('tmin', 0)
-    tmax = dataloader_config.get('tmax', 90)
-    view_dist = dataloader_config.get('view_dist', 80)
-    view_angle = dataloader_config.get('view_angle', np.radians(120))
-    dt = dataloader_config.get('dt', 0.1)
-    expert_action_bounds = dataloader_config.get('expert_action_bounds',
-                                                 [[-3, 3], [-0.7, 0.7]])
-    expert_position = dataloader_config.get('expert_position', True)
-    state_normalization = dataloader_config.get('state_normalization', 100)
-    n_stacked_states = dataloader_config.get('n_stacked_states', 5)
+        # Create joint action space
+        actions_to_joint_idx = {}
+        i = 0
+        for accel in accel_grid:
+            for steer in steer_grid:
+                actions_to_joint_idx[accel, steer] = [i]
+                i += 1   
+    
+    # Load dataloader config
+    view_dist = data_config.get('view_dist', 80)
+    view_angle = data_config.get('view_angle', np.radians(120))
+    dt = data_config.get('dt', 0.1)
+    expert_action_bounds = data_config['expert_action_bounds']
+    expert_position = False
+    state_normalization = data_config.get('state_normalization', 100)
+    n_stacked_states = data_config.get('n_stacked_states', 5)
 
     while True:
         # select a random scenario path
@@ -57,7 +76,7 @@ def _get_waymo_iterator(paths, dataloader_config, scenario_config):
         action_list = []
 
         # iterate over timesteps and objects of interest
-        for time in range(tmin, tmax):
+        for time in range(data_config['tmin'], data_config['tmax']):
             for obj in objects_of_interest:
                 # get state
                 ego_state = scenario.ego_state(obj)
@@ -80,7 +99,7 @@ def _get_waymo_iterator(paths, dataloader_config, scenario_config):
                 if np.isclose(obj.position.x, ERR_VAL):
                     continue
 
-                if not expert_position:
+                if not expert_position: # Taking the acc and steering wheel angle!
                     # get expert action
                     expert_action = scenario.expert_action(obj, time)
                     # check for invalid action (because no value available for taking derivative)
@@ -88,7 +107,9 @@ def _get_waymo_iterator(paths, dataloader_config, scenario_config):
                     if expert_action is None:
                         continue
                     expert_action = expert_action.numpy()
-                    # now find the corresponding expert actions in the grids
+                    
+                    acceleration = expert_action[0]
+                    steering = expert_action[1]
 
                     # throw out actions containing NaN or out-of-bound values
                     if np.isnan(expert_action).any() \
@@ -97,6 +118,7 @@ def _get_waymo_iterator(paths, dataloader_config, scenario_config):
                             or expert_action[1] < expert_action_bounds[1][0] \
                             or expert_action[1] > expert_action_bounds[1][1]:
                         continue
+
                 else:
                     expert_pos_shift = scenario.expert_pos_shift(obj, time)
                     if expert_pos_shift is None:
@@ -104,6 +126,7 @@ def _get_waymo_iterator(paths, dataloader_config, scenario_config):
                     expert_pos_shift = expert_pos_shift.numpy()
                     expert_heading_shift = scenario.expert_heading_shift(
                         obj, time)
+                    
                     if expert_heading_shift is None \
                             or expert_pos_shift[0] < expert_action_bounds[0][0] \
                             or expert_pos_shift[0] > expert_action_bounds[0][1] \
@@ -112,8 +135,20 @@ def _get_waymo_iterator(paths, dataloader_config, scenario_config):
                             or expert_heading_shift < expert_action_bounds[2][0] \
                             or expert_heading_shift > expert_action_bounds[2][1]:
                         continue
+                    
                     expert_action = np.concatenate(
                         (expert_pos_shift, [expert_heading_shift]))
+                    
+            
+                # Convert to joint action
+                if data_config['joint_act_space']:
+
+                    # Map actions to nearest grid indices
+                    accel_grid_idx = utils.find_closest_index(accel_grid, acceleration)
+                    steering_grid_idx = utils.find_closest_index(steer_grid, steering)
+                    
+                    # Map to joint action space
+                    expert_action = actions_to_joint_idx[accel_grid[accel_grid_idx], steer_grid[steering_grid_idx]]
 
                 # yield state and expert action
                 if stacked_state[obj.getID()] is not None:
@@ -178,24 +213,50 @@ class WaymoDataset(torch.utils.data.IterableDataset):
 
 
 if __name__ == '__main__':
-    dataset = WaymoDataset(data_path='dataset/tf_records',
-                           file_limit=20,
-                           dataloader_config={
-                               'view_dist': 80,
-                               'n_stacked_states': 3,
-                           },
-                           scenario_config={
-                               'start_time': 0,
-                               'allow_non_vehicles': True,
-                               'spawn_invalid_objects': True,
-                           })
 
-    data_loader = torch.utils.data.DataLoader(
-        dataset,
-        batch_size=32,
-        num_workers=4,
-        pin_memory=True,
+    args = BehavioralCloningSettings()
+
+    expert_bounds = [
+        [args.accel_lb, args.accel_ub], 
+        [args.steering_lb, args.steering_ub],
+    ]
+
+    dataloader_config = {
+            'tmin': args.tmin,
+            'tmax': args.tmax,
+            'accel_lb': args.accel_lb,
+            'accel_ub': args.accel_ub,
+            'accel_disc': args.accel_disc,
+            'steering_lb': args.steering_disc,
+            'steering_ub': args.steering_ub,
+            'steering_disc': args.steering_disc,
+            'view_dist': args.view_dist,
+            'view_angle': args.view_angle,
+            'dt': args.dt,
+            'expert_action_bounds': expert_bounds,
+            'joint_act_space': args.joint_act_space,
+            'expert_position': args.actions_are_positions,
+            'state_normalization': args.state_normalization,
+            'n_stacked_states': args.n_stacked_states,
+    }
+    
+    train_dataset = WaymoDataset(
+        data_path=args.train_data_path,
+        file_limit=args.num_files,
+        dataloader_config=dataloader_config,
+        scenario_config=scenario_config,
     )
 
-    for i, x in zip(range(100), data_loader):
-        print(i, x[0].shape, x[1].shape)
+    train_loader = iter(
+        DataLoader(
+            train_dataset,
+            batch_size=5,
+            num_workers=args.n_cpus,
+            pin_memory=True,
+        ))
+    
+    states, expert_actions = next(train_loader)
+
+    print('hi')
+    # for i, x in zip(range(100), data_loader):
+    #     print(i, x[0].shape, x[1].shape)
