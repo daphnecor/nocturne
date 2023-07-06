@@ -28,7 +28,7 @@ class PPOExperimentConfig:
     save_model: bool = True           # save policy and value networks
     device: str = None
     max_agents: int = 2
-    num_processes: int = 2
+    num_processes: int = 1
     # fmt: on
 
 

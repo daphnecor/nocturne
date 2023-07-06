@@ -17,12 +17,12 @@ sims_per_step: 10
 img_as_state: False
 discretize_actions: True
 include_head_angle: False # Whether to include the head tilt/angle as part of a vehicle's action
-accel_discretization: 15
-accel_lower_bound: -3
+accel_discretization: 5
+accel_lower_bound: -2
 accel_upper_bound: 2
 steering_lower_bound: -0.7 # corresponds to about 40 degrees of max steering angle
 steering_upper_bound: 0.7 # corresponds to about 40 degrees of max steering angle
-steering_discretization: 15 #43
+steering_discretization: 5 #43
 head_angle_lower_bound: -1.6
 head_angle_upper_bound: 1.6
 head_angle_discretization: 5

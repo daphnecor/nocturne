@@ -224,7 +224,8 @@ def main():
         
         ppo_agent.to("cpu")
 
-        # mp.set_start_method('spawn')
+        logging.info(f'NUM_PROCESSES: {args_exp.num_processes}')
+
         with Pool(args_exp.num_processes) as pool:
             rollout_buffers = pool.starmap(
                 _do_policy_rollout,
@@ -239,6 +240,8 @@ def main():
                     for rollout_step in range(args_exp.num_policy_rollouts)
                 ]
             )
+            
+        # Put device back to GPU
         ppo_agent.to(args_exp.device)
 
         logging.info(f'Total time rollouts: {time.time() - start_rollout}')
