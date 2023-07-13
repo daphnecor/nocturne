@@ -62,3 +62,4 @@ data/*
 outputs/*
 wandb/*
 
+experiments/human_regularized/models/BC_model.pt
