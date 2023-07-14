@@ -1,3 +1,7 @@
+"""
+Simple script to test multiprocessing on the cluster.
+"""
+
 from copy import deepcopy
 from itertools import repeat
 from multiprocessing import Pool
@@ -11,8 +15,7 @@ import torch
 import utils
 import numpy as np
 
-my_value = None
-    
+
 def f(x, Env, args_rl_env, agent):
     time.sleep(2)
     env = Env(args_rl_env)
@@ -44,9 +47,6 @@ def f(x, Env, args_rl_env, agent):
         for veh in moving_vehs:
             agent_id = veh.id
             rollout_buffer.rewards[agent_id][timestep] = torch.ones(size=(1,))
-
-
-        
 
     return rollout_buffer
 

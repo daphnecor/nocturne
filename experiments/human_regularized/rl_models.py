@@ -1,5 +1,8 @@
-import numpy as np
+"""
+PPO Policy and value networks. 
+"""
 
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.distributions.categorical import Categorical

@@ -20,10 +20,6 @@ from nocturne import Action, Simulation
 
 
 class BaseEnv(Env):
-    """
-    This is the Nocturne base environment.
-    """
-
     def __init__(self, cfg: Dict[str, Any], rank: int = 0) -> None:
         """Initialize the environment.
 

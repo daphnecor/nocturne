@@ -34,13 +34,6 @@ logging.basicConfig(level=logging.INFO)
 RL_SETTINGS_PATH = "experiments/human_regularized/rl_config.yaml"
 
 
-def make_env(config_path, seed):
-    """Make nocturne environment."""
-    env = BaseEnv(base_env_config)
-    env.seed(seed)
-    return env
-
-
 if __name__ == "__main__":
 
     # Configs
@@ -147,7 +140,7 @@ if __name__ == "__main__":
         for rollout_step in range(args_exp.num_policy_rollouts):
             # Reset environment
             # NOTE: this can either be the same env or a new traffic scene
-            # currently using the same scene for debugging purposes
+            # currently using the same scene for simplicity
             next_obs_dict = env.reset()
 
             controlled_agents = [agent.getID() for agent in env.controlled_vehicles]
