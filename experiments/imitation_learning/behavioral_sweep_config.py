@@ -35,6 +35,7 @@ class BehavioralCloningSettings:
     valid_data_path = Path(f'{DATA_FOLDER}/formatted_json_v2_no_tl_valid')
     valid_data_paths = list(Path(valid_data_path).glob('tfrecord*.json'))
 
+
 scenario_config = {
     'start_time': 0,
     'allow_non_vehicles': False,
