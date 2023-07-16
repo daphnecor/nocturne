@@ -116,6 +116,7 @@ def main():
 
     # Initialize
     run = wandb.init(config=basic_settings, magic=True)
+    artifact = wandb.Artifact(name='bc_model', type='model')
 
     # Sweep params
     BATCH_SIZE = wandb.config.batch_size
@@ -227,7 +228,7 @@ def main():
             "losses/val_accuracy": val_acc,
         })
 
-        if epoch % 20 == 0:
+        if epoch % 2 == 0:
             model_path = os.path.join(wandb.run.dir, f"BC_model.pt")
             torch.save(
                 obj={
@@ -240,6 +241,10 @@ def main():
                 f=model_path,
             )
             logging.critical(f"\nSaved model at {model_path}")
+
+    # Save trained Imitation Learning model as an artifact
+    artifact.add_file(local_path=model_path)
+    run.log_artifact(artifact)
 
 if __name__ == '__main__':
 
