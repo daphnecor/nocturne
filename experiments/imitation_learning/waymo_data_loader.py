@@ -18,7 +18,7 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 
-def _get_waymo_iterator(paths, data_config, scenario_config):
+def _get_waymo_iterator(paths, data_config, scenario_config, shuffle_data):
     
     # If worker has no paths, return an empty iterator
     if len(paths) == 0:
@@ -40,6 +40,8 @@ def _get_waymo_iterator(paths, data_config, scenario_config):
             for steer in steer_grid:
                 actions_to_joint_idx[accel, steer] = [i]
                 i += 1   
+
+        print(f'Action_dict: {actions_to_joint_idx}')
     
     # Load dataloader config
     view_dist = data_config.get('view_dist', 80)
@@ -85,7 +87,7 @@ def _get_waymo_iterator(paths, data_config, scenario_config):
                 state = np.concatenate((ego_state, visible_state))
 
                 # normalize state
-                state /= state_normalization
+                #state /= state_normalization
 
                 # stack state
                 if n_stacked_states > 1:
@@ -166,7 +168,8 @@ def _get_waymo_iterator(paths, data_config, scenario_config):
 
         if len(state_list) > 0:
             temp = list(zip(state_list, action_list))
-            random.shuffle(temp)
+            if shuffle_data:
+                random.shuffle(temp)
             state_list, action_list = zip(*temp)
             for state_return, action_return in zip(state_list, action_list):
                 yield (state_return, action_return)
@@ -179,17 +182,27 @@ class WaymoDataset(torch.utils.data.IterableDataset):
                  data_path,
                  dataloader_config={},
                  scenario_config={},
-                 file_limit=None):
+                 file_limit=None,
+                 single_scene=None, 
+                 shuffle_data=True):
         super(WaymoDataset).__init__()
 
         # save configs
         self.dataloader_config = dataloader_config
         self.scenario_config = scenario_config
+        self.shuffle_data = shuffle_data
 
         # get paths of dataset files (up to file_limit paths)
-        self.file_paths = list(
-            Path(data_path).glob('tfrecord*.json'))[:file_limit]
-        print(f'WaymoDataset: loading {len(self.file_paths)} files.')
+        if single_scene is None:
+            self.file_paths = list(
+                Path(data_path).glob('tfrecord*.json'))[:file_limit]
+            print(f'WaymoDataset: loading {len(self.file_paths)} files.')
+
+        # Use a single scene to perform training
+        else:
+            self.file_paths = [Path(data_path) / single_scene]
+            print(f'WaymoDataset: loading a single scene: {single_scene}')
+            print(self.file_paths)
 
         # sort the paths for reproducibility if testing on a small set of files
         self.file_paths.sort()
@@ -202,14 +215,14 @@ class WaymoDataset(torch.utils.data.IterableDataset):
         if worker_info is None:
             # single-process data loading, return the whole set of files
             return _get_waymo_iterator(self.file_paths, self.dataloader_config,
-                                       self.scenario_config)
+                                       self.scenario_config, self.shuffle_data)
 
         # distribute a unique set of file paths to each worker process
         worker_file_paths = np.array_split(
             self.file_paths, worker_info.num_workers)[worker_info.id]
         return _get_waymo_iterator(list(worker_file_paths),
                                    self.dataloader_config,
-                                   self.scenario_config)
+                                   self.scenario_config, self.shuffle_data)
 
 
 if __name__ == '__main__':
@@ -227,7 +240,7 @@ if __name__ == '__main__':
             'accel_lb': args.accel_lb,
             'accel_ub': args.accel_ub,
             'accel_disc': args.accel_disc,
-            'steering_lb': args.steering_disc,
+            'steering_lb': args.steering_lb,
             'steering_ub': args.steering_ub,
             'steering_disc': args.steering_disc,
             'view_dist': args.view_dist,
@@ -256,7 +269,3 @@ if __name__ == '__main__':
         ))
     
     states, expert_actions = next(train_loader)
-
-    print('hi')
-    # for i, x in zip(range(100), data_loader):
-    #     print(i, x[0].shape, x[1].shape)

@@ -18,7 +18,7 @@ class BehavioralCloningSettings:
     num_files: int = -1 
     tmin: int = 0
     tmax: int = 90
-    n_stacked_states: int = 5 # Agent memory
+    n_stacked_states: int = 1 # Agent memory
     view_dist: int = 80
     view_angle: int = 3.14
     dt: float = 0.1
@@ -34,7 +34,7 @@ class BehavioralCloningSettings:
     train_data_path = Path(f'{DATA_FOLDER}/formatted_json_v2_no_tl_train')
     valid_data_path = Path(f'{DATA_FOLDER}/formatted_json_v2_no_tl_valid')
     valid_data_paths = list(Path(valid_data_path).glob('tfrecord*.json'))
-
+    single_scene: str = "example_scenario.json"
 
 scenario_config = {
     'start_time': 0,

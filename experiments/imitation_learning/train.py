@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 import wandb
 
-from bc_model import BehavioralCloningAgentJoint
+from bc_models import BehavioralCloningAgentJoint
 from waymo_data_loader import WaymoDataset
 import utils
 from behavioral_sweep_config import BehavioralCloningSettings
@@ -148,7 +148,7 @@ def main():
         'accel_lb': args.accel_lb,
         'accel_ub': args.accel_ub,
         'accel_disc': args.accel_disc,
-        'steering_lb': args.steering_disc,
+        'steering_lb': args.steering_lb,
         'steering_ub': args.steering_ub,
         'steering_disc': args.steering_disc,
         'view_dist': args.view_dist,
@@ -166,6 +166,7 @@ def main():
         file_limit=args.num_files,
         dataloader_config=dataloader_config,
         scenario_config=scenario_config,
+        single_scene=args.single_scene,
     )
 
     train_loader = iter(
@@ -181,6 +182,7 @@ def main():
         file_limit=args.num_files,
         dataloader_config=dataloader_config,
         scenario_config=scenario_config,
+        single_scene=args.single_scene,
     )
 
     val_loader = iter(
@@ -193,6 +195,8 @@ def main():
 
     sample_state, _ = next(train_loader)
     state_dim = sample_state.shape[-1]
+
+    logging.info(f"Observation dim: {state_dim}")
 
     # Build model
     model = BehavioralCloningAgentJoint(
@@ -250,7 +254,7 @@ if __name__ == '__main__':
             'name': 'loss'
         },
         'parameters': {
-            'epochs': {'values': [500]},
+            'epochs': {'values': [10]},
             'batch_size': {'values': [512, 1024, 2048]},
             'hidden_layers': {'values': [[1024, 512, 256], [1024, 512, 128], [1024, 512, 448]]}, 
             'lr': { 'values': [1e-5, 5e-5, 1e-4, 5e-4]},
@@ -265,4 +269,3 @@ if __name__ == '__main__':
 
     # Run sweeps
     wandb.agent(sweep_id, function=main, count=1)
-
