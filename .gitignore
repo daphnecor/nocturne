@@ -57,6 +57,7 @@ test_venv/*
 # Ignore all data
 data/*
 *.json
+data**
 
 # Logs
 outputs/*

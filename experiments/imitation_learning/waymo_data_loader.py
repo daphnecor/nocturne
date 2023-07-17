@@ -263,7 +263,7 @@ if __name__ == '__main__':
     train_loader = iter(
         DataLoader(
             train_dataset,
-            batch_size=5,
+            batch_size=10,
             num_workers=args.n_cpus,
             pin_memory=True,
         ))

@@ -232,9 +232,12 @@ def main():
             model_path = os.path.join(wandb.run.dir, f"BC_model.pt")
             torch.save(
                 obj={
-                    "iter": iter,
                     "model_state_dict": model.state_dict(),
+                    "hidden_layers": HIDDEN_LAYERS,
+                    "actions_discretizations": [args.accel_disc, args.steering_disc],
+                    "actions_bounds": expert_bounds,
                     "optimizer_state_dict": optimizer.state_dict(),
+                    "epoch": epoch,
                     "train_loss": train_loss,
                     "val_loss": val_loss,
                 },
@@ -259,7 +262,7 @@ if __name__ == '__main__':
             'name': 'loss'
         },
         'parameters': {
-            'epochs': {'values': [10]},
+            'epochs': {'values': [5]},
             'batch_size': {'values': [512, 1024, 2048]},
             'hidden_layers': {'values': [[1024, 512, 256], [1024, 512, 128], [1024, 512, 448]]}, 
             'lr': { 'values': [1e-5, 5e-5, 1e-4, 5e-4]},

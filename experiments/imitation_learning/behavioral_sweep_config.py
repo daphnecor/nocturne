@@ -36,11 +36,21 @@ class BehavioralCloningSettings:
     valid_data_paths = list(Path(valid_data_path).glob('tfrecord*.json'))
     single_scene: str = "example_scenario.json"
 
+# scenario_config = {
+#     'start_time': 0,
+#     'allow_non_vehicles': False,
+#     'spawn_invalid_objects': True,
+#     'max_visible_road_points': 500,
+#     'sample_every_n': 1,
+#     'road_edge_first': False,
+# }
+
 scenario_config = {
-    'start_time': 0,
-    'allow_non_vehicles': False,
-    'spawn_invalid_objects': True,
-    'max_visible_road_points': 500,
-    'sample_every_n': 1,
-    'road_edge_first': False,
+    'start_time': 0, 
+    'allow_non_vehicles': False, 
+    'moving_threshold': 0.2, 
+    'speed_threshold': 0.05, 
+    'max_visible_road_points': 500, 
+    'sample_every_n': 1, 
+    'road_edge_first': False
 }
