@@ -7,7 +7,7 @@ DATA_FOLDER = '/scratch/dc4971/nocturne/data'
 @dataclass
 class BehavioralCloningSettings:
     # fmt: off
-    seed: int = None # 12
+    seed: int = None 
     accel_disc: int = 5
     accel_lb: int = -2
     accel_ub: int = 2

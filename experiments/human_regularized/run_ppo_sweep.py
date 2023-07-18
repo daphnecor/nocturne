@@ -33,7 +33,7 @@ logging.basicConfig(level=logging.INFO)
 
 def main():
 
-    # Standard configurations (not tuning)
+    # Default configurations (params we're not tuning)
     args_exp = PPOExperimentConfig()
     args_wandb = WandBSettings()
     args_human_pol = HumanPolicyConfig()
@@ -42,6 +42,7 @@ def main():
 
     # Initialize run
     run = wandb.init()
+    artifact = wandb.Artifact(name='ppo_network', type='model')
 
     # Get sweep params
     NUM_ROLLOUTS = wandb.config.num_rollouts
@@ -96,7 +97,7 @@ def main():
 
     global_step = 0
 
-    for iter in range(1, TOTAL_ITERS):
+    for iter_ in range(1, TOTAL_ITERS):
         start_iter = time.time()
 
         # Storage
@@ -154,29 +155,14 @@ def main():
 
             # Adapt learning rate based on how far we are in the learning process
             if args_exp.anneal_lr:
-                frac = 1.0 - (iter - 1.0) / TOTAL_ITERS
+                frac = 1.0 - (iter_ - 1.0) / TOTAL_ITERS
                 lrnow = frac * args_exp.learning_rate
                 optimizer.param_groups[0]["lr"] = lrnow
 
-            frames = []
-
+    
             # # # #  Interact with environment  # # # #
             start_env = time.time()
             for step in range(0, args_exp.num_steps):
-                # Render env every zeroth rollout, every k iterations
-                if args_wandb.record_video:
-                    if (
-                        iter % args_wandb.log_every_t_iters == 0
-                        and step % args_wandb.log_every_t_steps == 0
-                        and rollout_step == 0
-                    ):
-                        scene_frame = utils.render_scene(
-                            env=env,
-                            render_mode=args_wandb.render_mode,
-                            window_size=args_wandb.window_size,
-                        )
-                        frames.append(scene_frame)
-                        del scene_frame
 
                 global_step += 1 * num_agents
 
@@ -306,23 +292,6 @@ def main():
                         ],
                     }
                 )
-
-                if (
-                    iter % args_wandb.log_every_t_iters == 0
-                    and rollout_step == 0
-                    and args_wandb.record_video
-                ):
-                    movie_frames = np.array(frames, dtype=np.uint8)
-                    wandb.log(
-                        {
-                            "video": wandb.Video(
-                                movie_frames,
-                                fps=args_wandb.render_fps,
-                                caption=f"Training iter: {iter}",
-                            ),
-                        }
-                    )
-                    del movie_frames
 
             # Clear buffer for next scene
             buffer.clear()
@@ -529,28 +498,34 @@ def main():
         if args_wandb.track:
             wandb.log(
                 {
-                    "iter": iter,
+                    "iter": iter_,
                     "profiling/rollout_step_frac": time_rollouts / time_iter,
                     "profiling/optim_step_frac": time_optim / time_iter,
                 }
             )
 
         # Save model checkpoint in wandb directory
-        if iter % SAVE_MODEL_FREQ == 0 and args_wandb.track and args_exp.save_model:
-            model_path = os.path.join(wandb.run.dir, f"Nocturne-v0_ppo.pt")
+        if iter_ % SAVE_MODEL_FREQ == 0:
+            model_path = os.path.join(wandb.run.dir, f"ppo_model_{SCENE_NAME}.pt")
             torch.save(
                 obj={
-                    "iter": iter,
+                    "iter": iter_,
                     "model_state_dict": ppo_agent.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
+                    "obs_space_dim": obs_space_dim,
+                    "act_space_dim": act_space_dim,
+                    "iter": iter_,
                     "policy_loss": pg_loss,
                     "ep_reward": current_ep_reward,
                     "minibatch_size": minibatch_size,
                 },
                 f=model_path,
             )
-            logging.critical(f"\nSaved model at {model_path}")
-
+            logging.info(f"\nSaved model at {model_path}")
+        
+    # Save trained PPO agent as an artifact
+    artifact.add_file(local_path=model_path)
+    run.log_artifact(artifact)
 
     # # # #     End of run    # # # #
     env.close()
@@ -558,20 +533,21 @@ def main():
 
 if __name__ == "__main__":
 
+    SCENE_NAME = "simple_intersection"
     MAX_AGENTS = 2 #TODO: extend this to work with n agents
     RL_SETTINGS_PATH = "experiments/human_regularized/rl_config.yaml"
     SWEEP_NAME = "ppo_sweeps"
-    TOTAL_RUNS = 10
+    NUM_INDEP_RUNS = 5
     SAVE_MODEL_FREQ = 25
 
     # Define the search space
     sweep_configuration = {  
-        'method': 'grid',  
-        'metric': {'goal': 'minimize', 'name': 'surrogate_loss'},  
+        'method': 'random',  
+        'metric': {'goal': 'minimize', 'name': 'loss'},  
         'parameters': {  
-            'collision_penalty': { 'values': [0, 10, 20, 50]}, 
-            'num_rollouts': { 'values': [60, 70, 80, 90, 100]},     # Batch size
-            'total_iters': {'values': [400]},                       # Total number of iterations
+            'collision_penalty': { 'values': [0, 10, 20]}, 
+            'num_rollouts': { 'values': [80, 90, 100]},     # Batch size (rollouts per iteration)
+            'total_iters': {'values': [250]},                       # Total number of iterations
             'learning_rate': { 'values': [1e-5, 5e-5, 1e-4, 5e-4]},  
             'ent_coef': { 'values': [0.0, 0.01]},                   # Entropy coefficient
             'vf_coef': { 'values': [0.5, 0.25, 0.1]},               # Value function coefficient
@@ -585,4 +561,4 @@ if __name__ == "__main__":
     )
 
     # Start sweep job!
-    wandb.agent(sweep_id, function=main, count=TOTAL_RUNS)
+    wandb.agent(sweep_id, function=main, count=NUM_INDEP_RUNS)

@@ -11,7 +11,7 @@ single_agent_mode: False
 episode_length: 80
 # how many files of the total dataset to use. -1 indicates to use all of them
 num_files: 1 # Can use 1 to test on a single nocturne scene
-scenario_path: /scratch/dc4971/nocturne/data/formatted_json_v2_no_tl_train
+scenario_path: /scratch/dc4971/nocturne/data_full/formatted_json_v2_no_tl_train
 dt: 0.1
 sims_per_step: 10
 img_as_state: False
@@ -64,7 +64,7 @@ rew_cfg:
   shared_reward: False # agents get the collective reward instead of individual rewards
   goal_tolerance: 0.5
   reward_scaling: 10.0 # rescale all the rewards by this value. This can help w/ some learning algorithms
-  collision_penalty: 50
+  collision_penalty: 0
   shaped_goal_distance_scaling: 0.2
   shaped_goal_distance: True
   goal_distance_penalty: False # if shaped_goal_distance is true, then when this is True the goal distance 
