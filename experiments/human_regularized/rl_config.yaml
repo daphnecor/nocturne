@@ -92,4 +92,4 @@ subscriber:
   # agents in the system is less than max_num_vehicles
   keep_inactive_agents: False
   # for values greater than 1, we will stack inputs together (i.e. memory and equivalent of n_stacked_states)
-  n_frames_stacked: 5 # DEFAULT FOR BC = 5
+  n_frames_stacked: 1 # DEFAULT FOR BC = 5

@@ -17,14 +17,23 @@ class Agent(nn.Module):
     def __init__(self, state_dim, action_dim):
         super().__init__()
         self.critic = nn.Sequential(
-            layer_init(nn.Linear(state_dim, 64)),
+            layer_init(nn.Linear(state_dim, 1024)),
+            nn.Tanh(),
+            layer_init(nn.Linear(1024, 512)),
+            nn.Tanh(),
+            layer_init(nn.Linear(512, 64)),
             nn.Tanh(),
             layer_init(nn.Linear(64, 64)),
             nn.Tanh(),
             layer_init(nn.Linear(64, 1), std=1.0),
         ) 
+
         self.actor = nn.Sequential(
-            layer_init(nn.Linear(state_dim, 64)),
+            layer_init(nn.Linear(state_dim, 1024)),
+            nn.Tanh(),
+            layer_init(nn.Linear(1024, 512)),
+            nn.Tanh(),
+            layer_init(nn.Linear(512, 64)),
             nn.Tanh(),
             layer_init(nn.Linear(64, 64)),
             nn.Tanh(),

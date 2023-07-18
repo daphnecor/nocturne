@@ -29,6 +29,9 @@ from nocturne import Action
 
 from dataclasses import asdict, dataclass
 
+# Set wandb waiting time
+os.environ["WANDB__SERVICE_WAIT"] = "300"
+
 logging.basicConfig(level=logging.INFO)
 
 def main():
@@ -43,6 +46,9 @@ def main():
     # Initialize run
     run = wandb.init()
     artifact = wandb.Artifact(name='ppo_network', type='model')
+    rl_env_artifact = wandb.Artifact(name='rl_settings', type='config')
+    rl_env_artifact.add_file(RL_SETTINGS_PATH)
+    run.log_artifact(rl_env_artifact)
 
     # Get sweep params
     NUM_ROLLOUTS = wandb.config.num_rollouts
@@ -79,6 +85,8 @@ def main():
     obs_space_dim = env.observation_space.shape[0]
     act_space_dim = env.action_space.n
     ppo_agent = Agent(obs_space_dim, act_space_dim).to(device)
+
+    logging.info(f'actor_critic: {ppo_agent}')
     
     # Optimizer 
     optimizer = optim.Adam(ppo_agent.parameters(), lr=LR, eps=1e-5)
@@ -535,7 +543,7 @@ if __name__ == "__main__":
 
     SCENE_NAME = "simple_intersection"
     MAX_AGENTS = 2 #TODO: extend this to work with n agents
-    RL_SETTINGS_PATH = "experiments/human_regularized/rl_config.yaml"
+    RL_SETTINGS_PATH = "/scratch/dc4971/nocturne/experiments/human_regularized/rl_config.yaml"
     SWEEP_NAME = "ppo_sweeps"
     NUM_INDEP_RUNS = 5
     SAVE_MODEL_FREQ = 25
@@ -545,12 +553,12 @@ if __name__ == "__main__":
         'method': 'random',  
         'metric': {'goal': 'minimize', 'name': 'loss'},  
         'parameters': {  
-            'collision_penalty': { 'values': [0, 10, 20]}, 
-            'num_rollouts': { 'values': [80, 90, 100]},     # Batch size (rollouts per iteration)
-            'total_iters': {'values': [250]},                       # Total number of iterations
+            'collision_penalty': { 'values': [0, 10]}, 
+            'num_rollouts': { 'values': [80, 90, 100]},             # Batch size (rollouts per iteration)
+            'total_iters': {'values': [300]},                       # Total number of iterations
             'learning_rate': { 'values': [1e-5, 5e-5, 1e-4, 5e-4]},  
-            'ent_coef': { 'values': [0.0, 0.01]},                   # Entropy coefficient
-            'vf_coef': { 'values': [0.5, 0.25, 0.1]},               # Value function coefficient
+            'ent_coef': { 'values': [0.0]},                   # Entropy coefficient
+            'vf_coef': { 'values': [0.5, 0.25]},               # Value function coefficient
         }  
     }
 

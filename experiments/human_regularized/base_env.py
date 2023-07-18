@@ -15,6 +15,12 @@ from gym.spaces import Box, Discrete
 import numpy as np
 import torch
 
+import sys
+#TODO: structure files into packagaes
+sys.path.insert(1, '/scratch/dc4971/nocturne/experiments/imitation_learning/')
+
+from bc_models import BehavioralCloningAgentJoint
+
 from cfgs.config import ERR_VAL as INVALID_POSITION, get_scenario_dict
 from nocturne import Action, Simulation
 

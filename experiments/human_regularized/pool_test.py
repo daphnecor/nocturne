@@ -17,6 +17,8 @@ import numpy as np
 
 
 def f(x, Env, args_rl_env, agent):
+    print(f"Running from from process {os.getpid()}")
+    rollout_buffer = 0
     time.sleep(2)
     env = Env(args_rl_env)
     next_obs_dict = env.reset()
@@ -25,7 +27,7 @@ def f(x, Env, args_rl_env, agent):
 
     # Set data buffer for within scene logging
     rollout_buffer = utils.RolloutBuffer(
-        [agent.id for agent in moving_vehs],
+        [veh.id for veh in moving_vehs],
         80,
         env.observation_space.shape[0],
         env.action_space.n,
@@ -65,12 +67,14 @@ if __name__ == '__main__':
 
     start_time = time.time()
     for x in range(NUM_TASKS):
+        #rollout_buffers = f(x)
         rollout_buffers = f(x, BaseEnv, args_rl_env, deepcopy(ppo_agent))
     end_time = time.time()
     print(f"Duration w/o Pool: {end_time - start_time}")
     
     with Pool(processes=NUM_PROCESSES) as pool:
         start_time = time.time()
+        #rollout_buffers = pool.starmap(f, zip(range(NUM_TASKS)))
         rollout_buffers = pool.starmap(f, zip(range(NUM_TASKS), repeat(BaseEnv), repeat(args_rl_env), repeat(deepcopy(ppo_agent))))
         end_time = time.time()
         print(f"Duration w/ Pool: {end_time - start_time}")
