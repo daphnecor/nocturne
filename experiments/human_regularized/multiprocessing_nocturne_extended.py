@@ -1,5 +1,5 @@
 """Demo showing multiprocessing with Nocturne is blocked on cluster."""
-
+import torch
 from copy import copy, deepcopy
 from itertools import repeat
 from multiprocessing import Pool
@@ -19,6 +19,7 @@ with open(config_path, "r") as stream:
     rl_config = yaml.safe_load(stream)
 args_rl_env = dict(rl_config)
 
+
 def f(args_exp, Env, args_rl_env, rollout_buffer):
 
     start_scene_load = time.perf_counter()
@@ -29,15 +30,26 @@ def f(args_exp, Env, args_rl_env, rollout_buffer):
 
     # Added component 1: Step through scene --> Still works (not the issue)
     start_env_steps = time.perf_counter()
-    moving_vehs = env.scenario.getObjectsThatMoved()
-    for step in range(10_000):
+    
+    for step in range(30):
+
+        moving_vehs = env.scenario.getObjectsThatMoved()
+
         next_obs_dict, reward_dict, next_done_dict, info_dict = env.step({
             veh.id: Action(acceleration=2.0, steering=1.0, head_angle=0.5)
             for veh in moving_vehs
         })
+
+        agent_idx = 0
+        for veh in moving_vehs:
+            rollout_buffer.observations[agent_idx][step] = torch.Tensor(next_obs_dict[veh.id])
+            agent_idx += 1
+
     end_env_steps = time.perf_counter()
 
     print(f'(2/2) Stepping through env from process {os.getpid()} took {end_env_steps - start_env_steps:.2f}')
+
+    # Added component 2: 
 
 
 if __name__ == '__main__':
@@ -59,14 +71,18 @@ if __name__ == '__main__':
     ppo_agent = Agent(obs_space_dim, act_space_dim).to("cpu")
     moving_vehs = tmp_env.scenario.getObjectsThatMoved()
 
-    rollout_buffer = utils.RolloutBuffer(
-        moving_vehs,
+    print(moving_vehs)
+
+    rollout_buffer = utils.RolloutBufferAdapted(
+        len(moving_vehs),
         80,
         tmp_env.observation_space.shape[0],
         tmp_env.action_space.n,
         "cpu",
     )
 
+    #print(rollout_buffer.observations)
+    
     # SERIAL PROCESSING
     start_time = time.perf_counter()
     for idx in range(NUM_TASKS):
@@ -79,7 +95,7 @@ if __name__ == '__main__':
     # MULTIPROCESSING
     start_time = time.perf_counter()
     with Pool(processes=NUM_PROCESSES) as pool:
-        rollout_buffers = pool.starmap(f, zip(args_exps, repeat(BaseEnv), args_rl_envs, repeat(copy(rollout_buffer))))
+        rollout_buffers = pool.starmap(f, zip(args_exps, repeat(BaseEnv), args_rl_envs, repeat(deepcopy(rollout_buffer))))
     
     end_time = time.perf_counter()
     print("---")

@@ -132,6 +132,47 @@ class RolloutBufferMultiprocess:
                 self.dones[key][i].zero_()
                 self.values[key][i].zero_()
 
+class RolloutBufferAdapted:
+    """
+    Shared rollout buffer to store collected trajectories for every agent we control.
+    Must be reset after the policy network is updated.
+    """
+    def __init__(
+        self, num_agents, num_steps, obs_space_dim, act_space_dim, device
+    ):
+        self.observations = self.create_tensor_dict(
+            num_agents, num_steps, device, obs_space_dim
+        )
+        self.actions = self.create_tensor_dict(
+            num_agents,
+            num_steps,
+            device,
+        )
+        self.logprobs = self.create_tensor_dict(num_agents, num_steps, device)
+        self.rewards = self.create_tensor_dict(num_agents, num_steps, device)
+        self.dones = self.create_tensor_dict(num_agents, num_steps, device)
+        self.values = self.create_tensor_dict(num_agents, num_steps, device)
+
+    def create_tensor_dict(self, num_agents, num_steps, device="cpu", dim=None):
+        tensor_dict = {}
+        for agent in range(num_agents):
+            key = agent
+            if dim is not None:
+                tensor = torch.zeros((num_steps, dim))
+            else:
+                tensor = torch.zeros((num_steps,))
+            tensor_dict[key] = tensor.to(device)
+        return tensor_dict
+
+    def clear(self):
+        for key in self.observations.keys():
+            self.observations[key].zero_()
+            self.actions[key].zero_()
+            self.logprobs[key].zero_()
+            self.rewards[key].zero_()
+            self.dones[key].zero_()
+            self.values[key].zero_()
+
 
 class RolloutBuffer:
     """
