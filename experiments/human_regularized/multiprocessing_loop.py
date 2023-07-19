@@ -1,4 +1,4 @@
-"""Demo showing multiprocessing works on cluster computing a sum."""
+"""Demo showing multiprocessing for computing a sum."""
 
 import time
 from multiprocessing import Pool
