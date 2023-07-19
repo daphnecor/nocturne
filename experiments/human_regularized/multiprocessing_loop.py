@@ -36,9 +36,10 @@ def sum_square_no_mp(numbers):
 
 if __name__ == '__main__':
 
-    NUM_PROCESSES = 2
-    print(f'{os.cpu_count()} cpus available on cluster. Using: {NUM_PROCESSES} for this task.')
+
+    NUM_PROCESSES = 8
     numbers = range(20_000)
     
+    print(f'{os.cpu_count()} cpus available on cluster. Using: {NUM_PROCESSES} for this task.')    
     sum_square_no_mp(numbers)
     sum_square_with_mp(numbers)

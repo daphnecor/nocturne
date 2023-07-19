@@ -1,5 +1,6 @@
 from typing import List
 import yaml
+from multiprocessing import Manager
 
 import torch
 
@@ -87,6 +88,49 @@ def dict_to_tensor(my_dict):
         tensor_list.append(torch.Tensor(tensor))
     stacked_tensor = torch.stack(tensor_list, dim=1)
     return stacked_tensor.squeeze()
+
+
+class RolloutBufferMultiprocess:
+    def __init__(self, controlled_agents, num_steps, obs_space_dim, act_space_dim, device, manager=None):
+        self.observations = self.create_tensor_dict(
+            controlled_agents, num_steps, device, obs_space_dim, manager
+        )
+        self.actions = self.create_tensor_dict(
+            controlled_agents, num_steps, device, manager
+        )
+        self.logprobs = self.create_tensor_dict(
+            controlled_agents, num_steps, device, manager
+        )
+        self.rewards = self.create_tensor_dict(
+            controlled_agents, num_steps, device, manager
+        )
+        self.dones = self.create_tensor_dict(
+            controlled_agents, num_steps, device, manager
+        )
+        self.values = self.create_tensor_dict(
+            controlled_agents, num_steps, device, manager
+        )
+
+    def create_tensor_dict(self, controlled_agents, num_steps, device, dim=None, manager=None):
+        tensor_dict = {}
+        for agent in controlled_agents:
+            key = agent
+            if dim is not None:
+                tensor = manager.list([torch.zeros((dim,)).to(device)] * num_steps)
+            else:
+                tensor = manager.list([torch.zeros(()).to(device)] * num_steps)
+            tensor_dict[key] = tensor
+        return tensor_dict
+
+    def clear(self):
+        for key in self.observations.keys():
+            for i in range(len(self.observations[key])):
+                self.observations[key][i].zero_()
+                self.actions[key][i].zero_()
+                self.logprobs[key][i].zero_()
+                self.rewards[key][i].zero_()
+                self.dones[key][i].zero_()
+                self.values[key][i].zero_()
 
 
 class RolloutBuffer:

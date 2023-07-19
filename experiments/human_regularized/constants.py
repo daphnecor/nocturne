@@ -13,7 +13,7 @@ class PPOExperimentConfig:
     torch_deterministic = True          # if toggled, `torch.backends.cudnn.deterministic=False`
     cuda = True                         # if toggled, cuda will be enabled by default
     total_iters: int = 1 #500          # total iterations of the experiments
-    num_policy_rollouts: int = 20 # 90  # determines the batch size, the amount of experience to collect before doing an optim step
+    num_policy_rollouts: int = 8 # 90  # determines the batch size, the amount of experience to collect before doing an optim step
     num_steps: int = 90                 # the number of steps to run in each environment per policy rollout
     learning_rate: float = 1e-4         # the learning rate of the optimizer 
     anneal_lr: float = True             # toggle learning rate annealing for policy and value networks
@@ -31,7 +31,7 @@ class PPOExperimentConfig:
     save_model: bool = True             # save policy and value networks
     device: str = None                  # 'cpu' or 'cuda'
     max_agents: int = 2                 # maximum number of agents in the scene
-    num_processes: int = 1              # number of cpu progresses to use for the policy rollouts
+    num_processes: int = 1            # number of cpu progresses to use for the policy rollouts
     # fmt: on   
 
 @dataclass
