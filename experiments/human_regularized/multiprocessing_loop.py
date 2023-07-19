@@ -17,8 +17,8 @@ def sum_square_with_mp(numbers):
     p = Pool(processes=NUM_PROCESSES)
     result = p.map(sum_square, numbers)
 
-    # p.close()
-    # p.join()
+    p.close()
+    p.join()
 
     print(f"Processing {len(numbers)} numbers w/ Pool took: {time.time() - start_time:.2f} s")
 
@@ -38,7 +38,7 @@ if __name__ == '__main__':
 
     NUM_PROCESSES = 2
     print(f'{os.cpu_count()} cpus available on cluster. Using: {NUM_PROCESSES} for this task.')
-    numbers = range(10_000)
+    numbers = range(20_000)
     
     sum_square_no_mp(numbers)
     sum_square_with_mp(numbers)
