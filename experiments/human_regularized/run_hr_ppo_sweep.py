@@ -15,6 +15,7 @@ from torch.distributions.categorical import Categorical
 import utils
 import yaml
 import wandb
+import scipy
 
 from base_env import BaseEnv
 from constants import (
@@ -33,6 +34,17 @@ from dataclasses import asdict
 os.environ["WANDB__SERVICE_WAIT"] = "300"
 
 logging.basicConfig(level=logging.INFO)
+
+def scipy_kl_batch(tau_dist, actor_dist):  
+    batch_size = tau_dist.probs.shape[0]
+    sum_kl_div = 0
+    for i in range(batch_size):
+        p_tau = tau_dist.probs[i, :].detach().numpy()
+        p_actor = actor_dist.probs[i, :].detach().numpy()
+        sum_kl_div += scipy.special.kl_div(p_tau, p_actor).sum()
+    
+    avg_kl_div = sum_kl_div / batch_size
+    return avg_kl_div
 
 def main():
 
@@ -220,17 +232,6 @@ def main():
                     action_dict
                 )
                 
-                # Sanity check: log (x, y) coordinates for both vehicles
-                if args_wandb.track:
-                    for veh in env.controlled_vehicles:
-                        wandb.log(
-                            {
-                                "global_step": step,
-                                f"veh_{veh.id}_x_pos": veh.position.x,
-                                f"veh_{veh.id}_y_pos": veh.position.y,
-                            }
-                        )
-
                 # Store rewards
                 for agent_id in next_obs_dict.keys():
                     buffer.rewards[agent_id][step] = torch.from_numpy(
@@ -420,7 +421,9 @@ def main():
                 action_idx, tau_dist = human_anchor_policy(b_obs[mb_inds])
                 actor_dist = ppo_agent.get_policy(b_obs[mb_inds])
                 
-                kl_div_to_human_policy = kl_loss(tau_dist.probs, actor_dist.probs)
+                kl_div_to_human_policy = kl_loss(tau_dist.probs.log(), actor_dist.probs)
+                # Use below to verify correctness, pytorch implementation is faster
+                #kl_div_scipy = scipy_kl_batch(actor_dist, tau_dist)
 
                 # Check if the minibatch has at least two elements
                 if len(mb_inds) < 2:
@@ -498,13 +501,13 @@ def main():
             wandb.log(
                 {
                     "global_step": global_step,
-                    "charts/b_advantages": wandb.Histogram(b_advantages.cpu().numpy()),
                     "charts/b_advantages_mean": b_advantages.mean(),
+                    "charts/entropy_human_policy_mean": tau_dist.entropy().detach().cpu().numpy().mean(),
                     "charts/learning_rate": optimizer.param_groups[0]["lr"],
-                    "losses/value_loss": v_loss.item(),
                     "losses/kl_div_to_human_policy": kl_div_to_human_policy.item(),
+                    "losses/value_loss": v_loss.item(),
                     "losses/policy_loss": pg_loss.item(),
-                    "losses/entropy": entropy_loss.item(),
+                    "losses/entropy_ppo_agent_mean": entropy_loss.item(),
                     "losses/kl_policy_update": approx_kl.item(),
                     "losses/clipfrac": np.mean(clipfracs),
                     "losses/explained_variance": explained_var,
@@ -554,7 +557,7 @@ def main():
 
 if __name__ == "__main__":
 
-    # Path to best imitation learning model
+    # Path to best imitation learning model so far
     BC_MODEL_VERSION = "v13"
     ARTIFACT_PATH = f"daphnecor/behavioral_cloning_grid_actions/bc_model_grid:{BC_MODEL_VERSION}"
 
@@ -571,12 +574,12 @@ if __name__ == "__main__":
         'metric': {'goal': 'minimize', 'name': 'loss'},  
         'parameters': {  
             'collision_penalty': { 'values': [0]}, 
-            'num_rollouts': { 'values': [80]},                     # Batch size (rollouts per iteration)
-            'total_iters': {'values': [200]},                      # Total number of iterations
-            'learning_rate': { 'values': [5e-5, 1e-4, 5e-4]},      # Learning rate
-            'ent_coef': { 'values': [0.0]},                        # Entropy coefficient
-            'vf_coef': { 'values': [0.5, 0.25]},                   # Value function coefficient
-            'lambda_hr': {'values': [1]},  # HR coefficient
+            'num_rollouts': { 'values': [2]},                  # Batch size (rollouts per iteration)
+            'total_iters': {'values': [200]},                  # Total number of iterations
+            'learning_rate': { 'values': [5e-5, 1e-4, 5e-4]},  # Learning rate
+            'ent_coef': { 'values': [0.0]},                    # Entropy coefficient
+            'vf_coef': { 'values': [0.5, 0.25]},               # Value function coefficient
+            'lambda_hr': {'values': [1]},                      # HR coefficient
         }  
     } 
 
