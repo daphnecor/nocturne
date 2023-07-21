@@ -407,7 +407,7 @@ class NocturneEnv(Env):
         else:
             self.dead_agent_ids = []
 
-        logging.info(
+        logging.debug(
             f"Reset traffic scene. Controlling agent ids: {[agent.id for agent in self.controlled_vehicles]}"
         )
 

@@ -4,6 +4,7 @@ import logging
 import random
 import time
 import os
+import json
 from pathlib import Path
 
 import numpy as np
@@ -16,9 +17,10 @@ import utils
 import yaml
 import wandb
 
+import nocturne_gym as gym
 from base_env import BaseEnv
+
 from constants import (
-    HumanPolicyConfig,
     PPOExperimentConfig,
     WandBSettings,
 )
@@ -39,8 +41,6 @@ def main():
     # Default configurations (params we're not tuning)
     args_exp = PPOExperimentConfig()
     args_wandb = WandBSettings()
-    args_human_pol = HumanPolicyConfig()
-    args_rl_env = utils.load_yaml_file(RL_SETTINGS_PATH)
     combined_dict = {**args_rl_env, **asdict(args_exp)}
 
     # Initialize run
@@ -76,7 +76,14 @@ def main():
     logging.critical(f"DEVICE: {device}")
 
     # Make environment 
-    env = BaseEnv(args_rl_env)
+    env = gym.NocturneEnv(
+        path_to_scene=path_to_file,
+        scene_name=file,
+        valid_veh_dict=valid_veh_dict,
+        scenario_config=scenario_config,
+        cfg=args_rl_env,
+    )
+    #env = BaseEnv(args_rl_env)
     env.collision_penalty = COLL_PENALTY
 
     logging.info(f'collision penalty: {env.collision_penalty}')
@@ -86,22 +93,10 @@ def main():
     act_space_dim = env.action_space.n
     ppo_agent = Agent(obs_space_dim, act_space_dim).to(device)
 
-    logging.info(f'actor_critic: {ppo_agent}')
-    
+    MODEL_NAME = f"ppo_model_Dstate_{obs_space_dim}_Dact_{act_space_dim}_S{SCENE_NAME}"
+
     # Optimizer 
     optimizer = optim.Adam(ppo_agent.parameters(), lr=LR, eps=1e-5)
-    kl_loss = nn.KLDivLoss(reduction="batchmean")
-
-    # # Load human anchor policy
-    # human_anchor_policy = BehavioralCloningAgentJoint(
-    #     num_inputs=observation_space_dim,
-    #     config=args_human_pol,
-    #     device=device,
-    # ).to(device)
-
-    # human_anchor_policy.load_state_dict(
-    #     torch.load(args_human_pol.pretrained_model_path)
-    # )
 
     global_step = 0
 
@@ -209,17 +204,6 @@ def main():
                 next_obs_dict, reward_dict, next_done_dict, info_dict = env.step(
                     action_dict
                 )
-                
-                # Sanity check: log (x, y) coordinates for both vehicles
-                if args_wandb.track:
-                    for veh in env.controlled_vehicles:
-                        wandb.log(
-                            {
-                                "global_step": step,
-                                f"veh_{veh.id}_x_pos": veh.position.x,
-                                f"veh_{veh.id}_y_pos": veh.position.y,
-                            }
-                        )
 
                 # Store rewards
                 for agent_id in next_obs_dict.keys():
@@ -406,10 +390,7 @@ def main():
                 end = start + minibatch_size
                 mb_inds = b_inds[start:end]
 
-                #TODO: integrate COMPUTE KL DIV TO HUMAN ANCHOR POLICY 
-                #action, log_prob, tau_dist = human_anchor_policy(b_obs[mb_inds])
                 actor_dist = ppo_agent.get_policy(b_obs[mb_inds])
-                # kl_div = kl_loss(tau_dist.probs, actor_dist.probs)
 
                 # Check if the minibatch has at least two elements
                 if len(mb_inds) < 2:
@@ -466,7 +447,6 @@ def main():
                     pg_loss
                     - ENT_COEF * entropy_loss
                     + VF_COEF * v_loss
-                    # - args_exp.human_kl_lam * kl_div
                 )
 
                 optimizer.zero_grad()
@@ -514,7 +494,7 @@ def main():
 
         # Save model checkpoint in wandb directory
         if iter_ % SAVE_MODEL_FREQ == 0:
-            model_path = os.path.join(wandb.run.dir, f"ppo_model_{SCENE_NAME}.pt")
+            model_path = os.path.join(wandb.run.dir, f"{MODEL_NAME}.pt")
             torch.save(
                 obj={
                     "iter": iter_,
@@ -541,24 +521,45 @@ def main():
 
 if __name__ == "__main__":
 
-    SCENE_NAME = "simple_intersection"
-    MAX_AGENTS = 2 #TODO: extend this to work with n agents
+    scenario_config = {
+        'start_time': 0, 
+        'allow_non_vehicles': False, 
+        'moving_threshold': 0.2, 
+        'speed_threshold': 0.05, 
+        'max_visible_road_points': 500, 
+        'sample_every_n': 1, 
+        'road_edge_first': False
+    }
+
+    file = "example_scenario.json"
+    path_to_file = "/scratch/dc4971/nocturne/data/formatted_json_v2_no_tl_train/"
+    SCENE_NAME = "_intersection_2agents" # example_scenario
+    MAX_AGENTS = 2 #TODO
     RL_SETTINGS_PATH = "/scratch/dc4971/nocturne/experiments/human_regularized/rl_config.yaml"
     SWEEP_NAME = "ppo_sweeps"
-    NUM_INDEP_RUNS = 5
+    NUM_INDEP_RUNS = 1
     SAVE_MODEL_FREQ = 25
+
+    # Load RL config
+    with open(RL_SETTINGS_PATH, "r") as stream:
+        args_rl_env = yaml.safe_load(stream)
+
+    # Load files
+    with open(os.path.join(path_to_file, "valid_files.json")) as f:
+        valid_veh_dict = json.load(f)
+
 
     # Define the search space
     sweep_configuration = {  
         'method': 'random',  
         'metric': {'goal': 'minimize', 'name': 'loss'},  
         'parameters': {  
-            'collision_penalty': { 'values': [0, 10]}, 
+            'collision_penalty': { 'values': [0]}, 
             'num_rollouts': { 'values': [80, 90, 100]},             # Batch size (rollouts per iteration)
-            'total_iters': {'values': [300]},                       # Total number of iterations
+            'total_iters': {'values': [1000]},                       # Total number of iterations
             'learning_rate': { 'values': [1e-5, 5e-5, 1e-4, 5e-4]},  
-            'ent_coef': { 'values': [0.0]},                   # Entropy coefficient
-            'vf_coef': { 'values': [0.5, 0.25]},               # Value function coefficient
+            'ent_coef': { 'values': [0.0]},                         # Entropy coefficient
+            'vf_coef': { 'values': [0.25]},                    # Value function coefficient
         }  
     }
 
