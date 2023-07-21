@@ -61,11 +61,17 @@ def main():
     rl_env_artifact.add_file(RL_SETTINGS_PATH)
     run.log_artifact(rl_env_artifact)
 
+    # Set device
+    device = torch.device(
+        "cuda" if torch.cuda.is_available() and args_exp.cuda else "cpu"
+    )
+    logging.info(f"DEVICE: {device}")
+
     # Use BC model
     bc_model_artifact = run.use_artifact(ARTIFACT_PATH, type="model")
     bc_model_artifact_dir = bc_model_artifact.download()
     checkpoint = torch.load(
-        f"{bc_model_artifact_dir}/BC_model.pt", map_location=torch.device("cpu")
+        f"{bc_model_artifact_dir}/BC_model.pt", map_location=device
     )
 
     logging.info(f'Loading imitation learning model...')
@@ -90,12 +96,6 @@ def main():
     torch.manual_seed(args_exp.seed)
     torch.backends.cudnn.deterministic = args_exp.torch_deterministic
 
-    # Set device
-    device = torch.device(
-        "cuda" if torch.cuda.is_available() and args_exp.cuda else "cpu"
-    )
-    logging.critical(f"DEVICE: {device}")
-
     # Make environment 
     env = BaseEnv(args_rl_env)
     env.collision_penalty = COLL_PENALTY
@@ -106,6 +106,8 @@ def main():
     obs_space_dim = env.observation_space.shape[0]
     act_space_dim = env.action_space.n
     ppo_agent = Agent(obs_space_dim, act_space_dim).to(device)
+
+    MODEL_NAME = f"hr_ppo_model_Dstate_{obs_space_dim}_Dact_{act_space_dim}_S{SCENE_NAME}"
     
     # Optimizer 
     optimizer = optim.Adam(ppo_agent.parameters(), lr=LR, eps=1e-5)
@@ -528,7 +530,7 @@ def main():
 
         # Save model checkpoint in wandb directory
         if iter_ % SAVE_MODEL_FREQ == 0:
-            model_path = os.path.join(wandb.run.dir, f"hr_ppo_model_{SCENE_NAME}.pt")
+            model_path = os.path.join(wandb.run.dir, f"{MODEL_NAME}.pt")
             torch.save(
                 obj={
                     "iter": iter_,
@@ -559,9 +561,8 @@ if __name__ == "__main__":
 
     # Path to best imitation learning model so far
     BC_MODEL_VERSION = "v13"
-    ARTIFACT_PATH = f"daphnecor/behavioral_cloning_grid_actions/bc_model_grid:{BC_MODEL_VERSION}"
-
-    SCENE_NAME = "simple_intersection"
+    ARTIFACT_PATH = f"daphnecor/behavioral_cloning_discrete/bc_model_grid:{BC_MODEL_VERSION}"
+    SCENE_NAME = "_intersection_2agents" 
     MAX_AGENTS = 2 #TODO: extend this to work with n agents
     RL_SETTINGS_PATH = "/scratch/dc4971/nocturne/experiments/human_regularized/rl_config.yaml"
     PROJECT_NAME = "hr_ppo_sweeps"
@@ -574,12 +575,12 @@ if __name__ == "__main__":
         'metric': {'goal': 'minimize', 'name': 'loss'},  
         'parameters': {  
             'collision_penalty': { 'values': [0]}, 
-            'num_rollouts': { 'values': [90]},                  # Batch size (rollouts per iteration)
-            'total_iters': {'values': [100]},                  # Total number of iterations
+            'num_rollouts': { 'values': [80, 90]},             # Batch size (rollouts per iteration)
+            'total_iters': {'values': [800]},                 # Total number of iterations
             'learning_rate': { 'values': [5e-5, 1e-4, 5e-4]},  # Learning rate
             'ent_coef': { 'values': [0.0]},                    # Entropy coefficient
             'vf_coef': { 'values': [0.5, 0.25]},               # Value function coefficient
-            'lambda_hr': {'values': [1]},                      # HR coefficient
+            'lambda_hr': {'values': [1, 0.6, 0.8]},          # HR coefficient
         }  
     } 
 
