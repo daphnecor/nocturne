@@ -298,7 +298,7 @@ def main():
                 wandb.log(
                     {
                         "global_step": global_step,
-                        "global_iter": iter,
+                        "global_iter": iter_,
                         "charts/num_agents_in_scene": num_agents,
                         "charts/total_episodic_return": current_ep_reward,
                         "charts/close_agent(3)_episodic_return": current_ep_rew_agents[3],
@@ -566,7 +566,7 @@ if __name__ == "__main__":
     RL_SETTINGS_PATH = "/scratch/dc4971/nocturne/experiments/human_regularized/rl_config.yaml"
     PROJECT_NAME = "hr_ppo_sweeps"
     NUM_INDEP_RUNS = 2
-    SAVE_MODEL_FREQ = 10
+    SAVE_MODEL_FREQ = 15
 
     # Define the search space
     sweep_configuration = {  
@@ -574,8 +574,8 @@ if __name__ == "__main__":
         'metric': {'goal': 'minimize', 'name': 'loss'},  
         'parameters': {  
             'collision_penalty': { 'values': [0]}, 
-            'num_rollouts': { 'values': [2]},                  # Batch size (rollouts per iteration)
-            'total_iters': {'values': [200]},                  # Total number of iterations
+            'num_rollouts': { 'values': [90]},                  # Batch size (rollouts per iteration)
+            'total_iters': {'values': [100]},                  # Total number of iterations
             'learning_rate': { 'values': [5e-5, 1e-4, 5e-4]},  # Learning rate
             'ent_coef': { 'values': [0.0]},                    # Entropy coefficient
             'vf_coef': { 'values': [0.5, 0.25]},               # Value function coefficient
