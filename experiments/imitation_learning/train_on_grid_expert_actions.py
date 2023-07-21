@@ -132,6 +132,7 @@ def main():
     # Initialize
     run = wandb.init(config=basic_settings, magic=True)
     artifact = wandb.Artifact(name='bc_model_grid', type='model')
+    action_space_dim = int(args.accel_disc * args.steering_disc)
 
     # Sweep params
     BATCH_SIZE = wandb.config.batch_size
@@ -182,6 +183,8 @@ def main():
         device=device, 
     ).to(device)
 
+    MODEL_NAME = f"bc_model_Dstate_{state_dim}_Dact_{action_space_dim}_S{SCENE_NAME}"
+
     # Create optimizer
     optimizer = Adam(model.parameters(), lr=LR)
     
@@ -200,13 +203,15 @@ def main():
             "losses/val_accuracy": val_acc,
         })
 
-        if epoch % 5 == 0:
-            model_path = os.path.join(wandb.run.dir, f"BC_model.pt")
+        if epoch % SAVE_MODEL_FREQ == 0:
+            model_path = os.path.join(wandb.run.dir, f"{MODEL_NAME}.pt")
             torch.save(
                 obj={
                     "model_state_dict": model.state_dict(),
                     "hidden_layers": HIDDEN_LAYERS,
                     "actions_discretizations": [args.accel_disc, args.steering_disc],
+                    "action_space": action_space_dim,
+                    "obs_space": state_dim,
                     "actions_bounds": expert_bounds,
                     "optimizer_state_dict": optimizer.state_dict(),
                     "epoch": epoch,
@@ -223,8 +228,16 @@ def main():
 
 if __name__ == '__main__':
 
-    EXPERT_OBS_PATH = "/scratch/dc4971/nocturne/experiments/imitation_learning/data_expert_grid/observations.pt"
-    EXPERT_ACTIONS_PATH = "/scratch/dc4971/nocturne/experiments/imitation_learning/data_expert_grid/expert_actions.pt"
+    # Choose a scene name, this is the example scene
+    SCENE_NAME = "_intersection_2agents"
+
+    # Provide paths to stored scene data
+    EXPERT_OBS_PATH = f"/scratch/dc4971/nocturne/experiments/imitation_learning/data_expert_grid/observations{SCENE_NAME}.pt"
+    EXPERT_ACTIONS_PATH = f"/scratch/dc4971/nocturne/experiments/imitation_learning/data_expert_grid/expert_actions{SCENE_NAME}.pt"
+
+    logging.info(f"IL scene data exists | obs: {os.path.exists(EXPERT_OBS_PATH)} | actions: {os.path.exists(EXPERT_ACTIONS_PATH)}")
+
+    SAVE_MODEL_FREQ = 50
 
     # Shared experiment settings
     args = BehavioralCloningSettings()
