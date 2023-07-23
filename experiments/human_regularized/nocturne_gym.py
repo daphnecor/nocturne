@@ -140,10 +140,15 @@ class NocturneEnv(Env):
                     np.abs(veh_obj.speed - veh_obj.target_speed)
                     < rew_cfg["speed_target_tolerance"]
                 )
-
+            # If agent reached its goal add goal reward
+            # EDIT @Daphne: add the number of remaining steps to the goal reward,
+            # so that agents are incentived to reach the goal afap. 
+            # Otherwise, it can be more advantageous to reach the goal slowly,
+            # thereby accumulating more dense rewards.
             if position_target_achieved and speed_target_achieved:
                 info_dict[veh_id]["goal_achieved"] = True
-                rew_dict[veh_id] += self.episode_length / rew_cfg["reward_scaling"]
+                early_bird_rew = self.episode_length - self.step_num
+                rew_dict[veh_id] += (self.episode_length / rew_cfg["reward_scaling"]) + early_bird_rew
 
             if rew_cfg["shaped_goal_distance"] and rew_cfg["position_target"]:
                 # penalize the agent for its distance from goal
@@ -175,7 +180,7 @@ class NocturneEnv(Env):
                         )
                         / rew_cfg["reward_scaling"]
                     )
-                # repeat the same thing for speed and heading
+                # repeat the same thing for speed
                 if rew_cfg["shaped_goal_distance"] and rew_cfg["speed_target"]:
                     if rew_cfg["goal_distance_penalty"]:
                         rew_dict[veh_id] -= (
@@ -191,9 +196,7 @@ class NocturneEnv(Env):
                         )
 
             # achieved our goal
-            if info_dict[veh_id]["goal_achieved"] and self.cfg.get(
-                "remove_at_goal", True
-            ):
+            if info_dict[veh_id]["goal_achieved"] and self.cfg.get("remove_at_goal", True):
                 done_dict[veh_id] = True
             if veh_obj.getCollided():
                 info_dict[veh_id]["collided"] = True

@@ -25,7 +25,7 @@ from constants import (
     WandBSettings,
 )
 
-from rl_models import Agent
+from rl_models import Agent, PPOAgent
 from cfgs.config import set_display_window
 from nocturne import Action
 
@@ -38,17 +38,13 @@ logging.basicConfig(level=logging.INFO)
 
 def main():
 
-    # Default configurations (params we're not tuning)
+    # Default configurations to be stored as metadata
     args_exp = PPOExperimentConfig()
     args_wandb = WandBSettings()
-    combined_dict = {**args_rl_env, **asdict(args_exp)}
+    meta_data_dict = {**args_rl_env, **asdict(args_exp)}
 
     # Initialize run
     run = wandb.init()
-    artifact = wandb.Artifact(name='ppo_network', type='model')
-    rl_env_artifact = wandb.Artifact(name='rl_settings', type='config')
-    rl_env_artifact.add_file(RL_SETTINGS_PATH)
-    run.log_artifact(rl_env_artifact)
 
     # Get sweep params
     NUM_ROLLOUTS = wandb.config.num_rollouts
@@ -57,11 +53,7 @@ def main():
     ENT_COEF = wandb.config.ent_coef
     VF_COEF = wandb.config.vf_coef
     COLL_PENALTY = wandb.config.collision_penalty
-
-    # Log
-    now = datetime.datetime.now()
-    formatted_time = now.strftime("%D%H%M")
-    run_name = f"Nocturne-v0__{args_wandb.exp_name}_{formatted_time}"
+    HIDDEN_LAYERS = wandb.config.hidden_layers
 
     # Seed
     random.seed(args_exp.seed)
@@ -73,9 +65,9 @@ def main():
     device = torch.device(
         "cuda" if torch.cuda.is_available() and args_exp.cuda else "cpu"
     )
-    logging.critical(f"DEVICE: {device}")
+    logging.info(f"DEVICE: {device}")
 
-    # Make environment 
+    # Make environment from selected traffic scene
     env = gym.NocturneEnv(
         path_to_scene=path_to_file,
         scene_name=file,
@@ -83,7 +75,6 @@ def main():
         scenario_config=scenario_config,
         cfg=args_rl_env,
     )
-    #env = BaseEnv(args_rl_env)
     env.collision_penalty = COLL_PENALTY
 
     logging.info(f'collision penalty: {env.collision_penalty}')
@@ -91,9 +82,17 @@ def main():
     # Initialize actor and critic models
     obs_space_dim = env.observation_space.shape[0]
     act_space_dim = env.action_space.n
-    ppo_agent = Agent(obs_space_dim, act_space_dim).to(device)
+    ppo_agent = PPOAgent(
+        obs_space_dim,
+        act_space_dim,
+        hidden_layers=HIDDEN_LAYERS,
+    ).to(device)
 
+    logging.info(f"ppo model: \n {ppo_agent}")
+
+    # Create descriptive model name
     MODEL_NAME = f"ppo_model_Dstate_{obs_space_dim}_Dact_{act_space_dim}_S{SCENE_NAME}"
+    model_path = os.path.join(wandb.run.dir, f"{MODEL_NAME}.pt")
 
     # Optimizer 
     optimizer = optim.Adam(ppo_agent.parameters(), lr=LR, eps=1e-5)
@@ -139,7 +138,7 @@ def main():
             # NOTE: this can either be the same env or a new traffic scene
             # currently using the same scene for debugging purposes
             next_obs_dict = env.reset()
-
+            
             controlled_agents = [agent.getID() for agent in env.controlled_vehicles]
             num_agents = len(controlled_agents)
             dict_next_done = {agent_id: False for agent_id in controlled_agents}
@@ -284,6 +283,7 @@ def main():
                         ],
                     }
                 )
+                
 
             # Clear buffer for next scene
             buffer.clear()
@@ -494,7 +494,15 @@ def main():
 
         # Save model checkpoint in wandb directory
         if iter_ % SAVE_MODEL_FREQ == 0:
-            model_path = os.path.join(wandb.run.dir, f"{MODEL_NAME}.pt")
+
+            # Create model artifact
+            model_artifact = wandb.Artifact(
+                name=f"{MODEL_ARTIFACT_NAME}_iter_{iter_}", 
+                type=MODEL_TYPE,
+                description=f"PPO on scene: {SCENE_NAME}",
+                metadata=dict(meta_data_dict),
+            )
+            
             torch.save(
                 obj={
                     "iter": iter_,
@@ -502,6 +510,7 @@ def main():
                     "optimizer_state_dict": optimizer.state_dict(),
                     "obs_space_dim": obs_space_dim,
                     "act_space_dim": act_space_dim,
+                    "hidden_layers": HIDDEN_LAYERS,
                     "iter": iter_,
                     "policy_loss": pg_loss,
                     "ep_reward": current_ep_reward,
@@ -509,11 +518,13 @@ def main():
                 },
                 f=model_path,
             )
-            logging.info(f"\nSaved model at {model_path}")
-        
-    # Save trained PPO agent as an artifact
-    artifact.add_file(local_path=model_path)
-    run.log_artifact(artifact)
+
+            # Save trained PPO agent as an artifact after 
+            model_artifact.add_file(local_path=model_path)
+            wandb.save(model_path)
+            run.log_artifact(model_artifact)
+
+            logging.info(f"\n Stored {MODEL_ARTIFACT_NAME} after {iter_} iters.")
 
     # # # #     End of run    # # # #
     env.close()
@@ -530,15 +541,17 @@ if __name__ == "__main__":
         'sample_every_n': 1, 
         'road_edge_first': False
     }
-
+    
+    MODEL_ARTIFACT_NAME = 'ppo_network'
+    MODEL_TYPE = 'ppo_model'
     file = "example_scenario.json"
     path_to_file = "/scratch/dc4971/nocturne/data/formatted_json_v2_no_tl_train/"
     SCENE_NAME = "_intersection_2agents" # example_scenario
     MAX_AGENTS = 2 #TODO
     RL_SETTINGS_PATH = "/scratch/dc4971/nocturne/experiments/human_regularized/rl_config.yaml"
     SWEEP_NAME = "ppo_sweeps"
-    NUM_INDEP_RUNS = 1
-    SAVE_MODEL_FREQ = 25
+    NUM_INDEP_RUNS = 3
+    SAVE_MODEL_FREQ = 100 # Save model every x iterations
 
     # Load RL config
     with open(RL_SETTINGS_PATH, "r") as stream:
@@ -548,18 +561,18 @@ if __name__ == "__main__":
     with open(os.path.join(path_to_file, "valid_files.json")) as f:
         valid_veh_dict = json.load(f)
 
-
     # Define the search space
     sweep_configuration = {  
         'method': 'random',  
         'metric': {'goal': 'minimize', 'name': 'loss'},  
         'parameters': {  
-            'collision_penalty': { 'values': [0]}, 
-            'num_rollouts': { 'values': [80, 90, 100]},             # Batch size (rollouts per iteration)
-            'total_iters': {'values': [1000]},                       # Total number of iterations
-            'learning_rate': { 'values': [1e-5, 5e-5, 1e-4, 5e-4]},  
-            'ent_coef': { 'values': [0.0]},                         # Entropy coefficient
-            'vf_coef': { 'values': [0.25]},                    # Value function coefficient
+            'collision_penalty': { 'values': [20, 50, 80]}, 
+            'num_rollouts': { 'values': [80]},             
+            'total_iters': {'values': [1000]},                
+            'learning_rate': { 'values': [5e-5, 1e-4, 5e-4]},  
+            'ent_coef': { 'values': [0.0]},                   
+            'vf_coef': { 'values': [0.2, 0.4]},                    
+            'hidden_layers': {'values': [[4096, 2048, 1024, 512, 248, 128]]}, 
         }  
     }
 
