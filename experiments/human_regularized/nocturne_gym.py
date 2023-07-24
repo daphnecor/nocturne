@@ -38,13 +38,13 @@ class NocturneEnv(Env):
         self.episode_length = 80
         self.t = 0
         self.step_num = 0
-        self.dt = 0.1 
+        self.dt = 0.1
 
         self.n_frames_stacked = self.cfg["subscriber"]["n_frames_stacked"]
         self.single_agent_mode = cfg["single_agent_mode"]
         self.seed(cfg["seed"])
         self.collision_penalty = self.cfg["rew_cfg"]["collision_penalty"]
-        
+
         # TODO: Add a function to compute the obs dim from a scenario config
         # We shouldn't have to create the sim and reset a scene in the init method
         self.simulation = Simulation(
@@ -53,7 +53,7 @@ class NocturneEnv(Env):
         )
         self.scenario = self.simulation.getScenario()
         self.controlled_vehicles = self.scenario.getObjectsThatMoved()
-        
+
         # Observation space
         obs_dict = self.reset()
         self.observation_space = Box(
@@ -90,6 +90,15 @@ class NocturneEnv(Env):
                 i += 1
 
     def step(self, action_dict):
+        """Take a simultaneous action in the envionment.
+
+        Args:
+            action_dict (Dict): A dictionary with vehicle ids as keys and the joint
+            action index as values.
+
+        Return:
+            obs_dict, rew_dict, done_dict, info_dict.
+        """
         obs_dict = {}
         rew_dict = {}
         done_dict = {}
@@ -103,6 +112,7 @@ class NocturneEnv(Env):
 
         for veh_obj in self.controlled_vehicles:
             veh_id = veh_obj.getID()
+
             if veh_id in self.done_ids:
                 continue
             self.context_dict[veh_id].append(self.get_observation(veh_obj))
@@ -131,6 +141,13 @@ class NocturneEnv(Env):
                ############################################"""
             position_target_achieved = True
             speed_target_achieved = True
+
+            # IF AGENT REACHED ITS TARGET POSITION AND SPEED: GIVE SPARSE REWARD
+            # EDIT @Daphne: add the number of remaining steps to the goal reward,
+            # so that agents are incentived to reach the goal afap.
+            # Otherwise, it can be advantageous to reach the goal slowly,
+            # accumulating more dense rewards along the way.
+
             if rew_cfg["position_target"]:
                 position_target_achieved = (goal_pos - obj_pos).norm() < rew_cfg[
                     "position_target_tolerance"
@@ -140,63 +157,37 @@ class NocturneEnv(Env):
                     np.abs(veh_obj.speed - veh_obj.target_speed)
                     < rew_cfg["speed_target_tolerance"]
                 )
-            # If agent reached its goal add goal reward
-            # EDIT @Daphne: add the number of remaining steps to the goal reward,
-            # so that agents are incentived to reach the goal afap. 
-            # Otherwise, it can be more advantageous to reach the goal slowly,
-            # thereby accumulating more dense rewards.
             if position_target_achieved and speed_target_achieved:
                 info_dict[veh_id]["goal_achieved"] = True
-                early_bird_rew = self.episode_length - self.step_num
-                rew_dict[veh_id] += (self.episode_length / rew_cfg["reward_scaling"]) + early_bird_rew
+                early_bird_rew = (self.episode_length - self.step_num) / rew_cfg[
+                    "reward_scaling"
+                ]
+                rew_dict[veh_id] += (
+                    self.episode_length / rew_cfg["reward_scaling"]
+                ) + early_bird_rew
 
+            # ADD DENSE REWARDS
             if rew_cfg["shaped_goal_distance"] and rew_cfg["position_target"]:
-                # penalize the agent for its distance from goal
-                # we scale by goal_dist_normalizers to ensure that this value is always less than the penalty for
-                # collision
-                if rew_cfg["goal_distance_penalty"]:
-                    rew_dict[veh_id] -= (
-                        rew_cfg.get("shaped_goal_distance_scaling", 1.0)
-                        * (
-                            (goal_pos - obj_pos).norm()
-                            / self.goal_dist_normalizers[veh_id]
-                        )
-                        / rew_cfg["reward_scaling"]
-                    )
-                else:
-                    # the minus one is to ensure that it's not beneficial to collide
-                    # we divide by goal_achieved_bonus / episode_length to ensure that
-                    # acquiring the maximum "get-close-to-goal" reward at every time-step is
-                    # always less than just acquiring the goal reward once
-                    # we also assume that vehicles are never more than 400 meters from their goal
-                    # which makes sense as the episodes are 9 seconds long i.e. we'd have to go more than
-                    # 40 m/s to get there
-                    rew_dict[veh_id] += (
-                        rew_cfg.get("shaped_goal_distance_scaling", 1.0)
-                        * (
-                            1
-                            - (goal_pos - obj_pos).norm()
-                            / self.goal_dist_normalizers[veh_id]
-                        )
-                        / rew_cfg["reward_scaling"]
-                    )
-                # repeat the same thing for speed
-                if rew_cfg["shaped_goal_distance"] and rew_cfg["speed_target"]:
-                    if rew_cfg["goal_distance_penalty"]:
-                        rew_dict[veh_id] -= (
-                            rew_cfg.get("shaped_goal_distance_scaling", 1.0)
-                            * (np.abs(veh_obj.speed - veh_obj.target_speed) / 40.0)
-                            / rew_cfg["reward_scaling"]
-                        )
-                    else:
-                        rew_dict[veh_id] += (
-                            rew_cfg.get("shaped_goal_distance_scaling", 1.0)
-                            * (1 - np.abs(veh_obj.speed - veh_obj.target_speed) / 40.0)
-                            / rew_cfg["reward_scaling"]
-                        )
+                
+                # Position
+                current_veh_pos_dist = (goal_pos - obj_pos).norm()
+                current_veh_pos_dist_norm = current_veh_distance / self.goal_dist_normalizers[veh_id]
+                dense_rew_pos_scaled = rew_cfg["shaped_goal_distance_scaling"] * (1 - current_veh_distance_norm) / rew_cfg["reward_scaling"]
+
+                rew_dict[veh_id] += dense_rew_pos_scaled
+
+                # Speed
+                current_veh_speed_dist = np.abs(veh_obj.speed - veh_obj.target_speed)
+                dense_rew_speed = rew_cfg["shaped_goal_distance_scaling"] * (1 - (current_veh_speed_dist / 40))
+                dense_rew_speed_scaled = dense_rew_speed / rew_cfg["reward_scaling"]
+                
+                #TODO: scale importance as a function of the timestep.
+                rew_dict[veh_id] += dense_rew_speed_scaled
 
             # achieved our goal
-            if info_dict[veh_id]["goal_achieved"] and self.cfg.get("remove_at_goal", True):
+            if info_dict[veh_id]["goal_achieved"] and self.cfg.get(
+                "remove_at_goal", True
+            ):
                 done_dict[veh_id] = True
             if veh_obj.getCollided():
                 info_dict[veh_id]["collided"] = True
@@ -209,6 +200,7 @@ class NocturneEnv(Env):
                 )
                 if self.cfg.get("remove_at_collide", True):
                     done_dict[veh_id] = True
+
             # remove the vehicle so that its trajectory doesn't continue. This is important
             # in the multi-agent setting.
             if done_dict[veh_id]:
@@ -224,10 +216,6 @@ class NocturneEnv(Env):
 
         for veh_obj in objs_to_remove:
             self.scenario.removeVehicle(veh_obj)
-
-        if self.cfg["rew_cfg"]["shared_reward"]:
-            total_reward = np.sum([rew_dict[key] for key in rew_dict.keys()])
-            rew_dict = {key: total_reward for key in rew_dict.keys()}
 
         # fill in the missing observations if we should be doing so
         if self.cfg["subscriber"]["keep_inactive_agents"]:
@@ -253,7 +241,6 @@ class NocturneEnv(Env):
         return obs_dict, rew_dict, done_dict, info_dict
 
     def reset(self):
-
         self.t = 0
         self.step_num = 0
 
@@ -273,6 +260,7 @@ class NocturneEnv(Env):
             #####################################################################"""
             dead_obs = self.get_observation(self.scenario.getVehicles()[0])
             self.dead_feat = -np.ones(dead_obs.shape[0] * self.n_frames_stacked)
+
             # step all the vehicles forward by one second and record their observations as context
             context_len = max(10, self.n_frames_stacked)
             self.context_dict = {
