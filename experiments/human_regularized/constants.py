@@ -7,6 +7,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 @dataclass
+class ScenarioConfig:
+    start_time: int = 0
+    allow_non_vehicles: bool = False
+    moving_threshold: float = 0.2
+    speed_threshold: float = 0.05
+    max_visible_road_points: int = 500
+    sample_every_n: int = 1
+    road_edge_first: bool = False
+
+@dataclass
 class PPOExperimentConfig:
     # fmt: off
     seed: int = 12                      # seed of the experiment
@@ -48,12 +58,3 @@ class WandBSettings:
     group: str = "debug"
     exp_name: str = "test_multiprocessing" 
 
-
-@dataclass
-class HumanPolicyConfig:
-    batch_size: int = 1
-    hidden_layers = [1025, 256, 128]  # Model used in paper
-    actions_discretizations = [15, 42]
-    actions_bounds = [[-6, 6], [-0.7, 0.7]]  # Bounds for (acc, steering)
-    lr: float = 1e-4
-    #pretrained_model_path: "" #TODO: link to W&B artifacts 

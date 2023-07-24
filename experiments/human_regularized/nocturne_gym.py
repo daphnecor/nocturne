@@ -171,8 +171,8 @@ class NocturneEnv(Env):
                 
                 # Position
                 current_veh_pos_dist = (goal_pos - obj_pos).norm()
-                current_veh_pos_dist_norm = current_veh_distance / self.goal_dist_normalizers[veh_id]
-                dense_rew_pos_scaled = rew_cfg["shaped_goal_distance_scaling"] * (1 - current_veh_distance_norm) / rew_cfg["reward_scaling"]
+                current_veh_pos_dist_norm = current_veh_pos_dist / self.goal_dist_normalizers[veh_id]
+                dense_rew_pos_scaled = rew_cfg["shaped_goal_distance_scaling"] * (1 - current_veh_pos_dist_norm) / rew_cfg["reward_scaling"]
 
                 rew_dict[veh_id] += dense_rew_pos_scaled
 
