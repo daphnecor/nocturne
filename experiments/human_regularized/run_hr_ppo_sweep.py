@@ -5,6 +5,7 @@ import random
 import time
 import os
 from pathlib import Path
+import time
 
 import numpy as np
 import torch
@@ -16,6 +17,7 @@ import utils
 import yaml
 import wandb
 import scipy
+import pdb
 
 from base_env import BaseEnv
 from constants import (
@@ -24,8 +26,8 @@ from constants import (
     WandBSettings,
 )
 
-from rl_models import Agent
 from bc_models import BehavioralCloningAgentJoint
+from rl_models import PPOAgent
 from nocturne import Action
 
 from dataclasses import asdict
@@ -84,6 +86,7 @@ def main():
     ENT_COEF = wandb.config.ent_coef
     VF_COEF = wandb.config.vf_coef
     COLL_PENALTY = wandb.config.collision_penalty
+    HIDDEN_LAYERS = wandb.config.hidden_layers
 
     # Log
     now = datetime.datetime.now()
@@ -105,7 +108,11 @@ def main():
     # Initialize actor and critic models
     obs_space_dim = env.observation_space.shape[0]
     act_space_dim = env.action_space.n
-    ppo_agent = Agent(obs_space_dim, act_space_dim).to(device)
+    ppo_agent = PPOAgent(
+        obs_space_dim,
+        act_space_dim,
+        hidden_layers=HIDDEN_LAYERS,
+    ).to(device)
 
     MODEL_NAME = f"hr_ppo_model_Dstate_{obs_space_dim}_Dact_{act_space_dim}_S{SCENE_NAME}"
     
@@ -216,11 +223,13 @@ def main():
                         for agent_id in controlled_agents
                         if agent_id not in already_done_ids
                     }
-
+        
                     for agent_id in action_dict.keys():
+                    
                         action, logprob, _, value = ppo_agent.get_action_and_value(
                             torch.Tensor(next_obs_dict[agent_id]).to(device)
                         )
+
                         # Store in buffer
                         buffer.values[agent_id][step] = value.flatten()
                         buffer.actions[agent_id][step] = action
@@ -478,10 +487,11 @@ def main():
 
                 entropy_loss = entropy.mean()
 
-                loss = (
-                    LAMBDA * (kl_div_to_human_policy) + 
-                    (1 - LAMBDA) * (pg_loss - ENT_COEF * entropy_loss + VF_COEF * v_loss)
-                )
+                # Compute final loss
+                LOSS_IL = LAMBDA * (kl_div_to_human_policy)
+                LOSS_PPO = (1 - LAMBDA) * (pg_loss - ENT_COEF * entropy_loss + VF_COEF * v_loss)
+
+                loss = LOSS_IL + LOSS_PPO
                 
                 # Backwards
                 optimizer.zero_grad()
@@ -511,6 +521,8 @@ def main():
                     "losses/policy_loss": pg_loss.item(),
                     "losses/entropy_ppo_agent_mean": entropy_loss.item(),
                     "losses/kl_policy_update": approx_kl.item(),
+                    "losses/PPO_loss_ratio": LOSS_PPO / loss,
+                    "losses/IL_loss_ratio": LOSS_IL / loss,
                     "losses/clipfrac": np.mean(clipfracs),
                     "losses/explained_variance": explained_var,
                 }
@@ -538,6 +550,7 @@ def main():
                     "optimizer_state_dict": optimizer.state_dict(),
                     "obs_space_dim": obs_space_dim,
                     "act_space_dim": act_space_dim,
+                    "hidden_layers": HIDDEN_LAYERS,
                     "iter": iter_,
                     "policy_loss": pg_loss,
                     "lambda_hr": LAMBDA,
@@ -576,11 +589,12 @@ if __name__ == "__main__":
         'parameters': {  
             'collision_penalty': { 'values': [0]}, 
             'num_rollouts': { 'values': [80, 90]},             # Batch size (rollouts per iteration)
-            'total_iters': {'values': [800]},                 # Total number of iterations
+            'total_iters': {'values': [1000]},                 # Total number of iterations
             'learning_rate': { 'values': [5e-5, 1e-4, 5e-4]},  # Learning rate
             'ent_coef': { 'values': [0.0]},                    # Entropy coefficient
             'vf_coef': { 'values': [0.5, 0.25]},               # Value function coefficient
-            'lambda_hr': {'values': [1, 0.6, 0.8]},          # HR coefficient
+            'lambda_hr': {'values': [0.8]},                    # HR coefficient
+            'hidden_layers': {'values': [[4096, 2048, 1024, 512, 248, 128]]}, 
         }  
     } 
 

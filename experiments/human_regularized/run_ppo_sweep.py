@@ -16,22 +16,16 @@ from torch.distributions.categorical import Categorical
 import utils
 import yaml
 import wandb
+from pprint import pprint
 
 import nocturne_gym as gym
-from base_env import BaseEnv
-
-from constants import (
-    PPOExperimentConfig,
-    WandBSettings,
-)
-
-from rl_models import Agent, PPOAgent
-from cfgs.config import set_display_window
+from constants import PPOExperimentConfig, WandBSettings
+from rl_models import PPOAgent
 from nocturne import Action
 
 from dataclasses import asdict, dataclass
 
-# Set wandb waiting time
+# Set wandb waiting time to avoid cluster timeout errors
 os.environ["WANDB__SERVICE_WAIT"] = "300"
 
 logging.basicConfig(level=logging.INFO)
@@ -77,6 +71,9 @@ def main():
     )
     env.collision_penalty = COLL_PENALTY
 
+    logging.info(f'env action space:')
+    pprint(env.idx_to_actions)
+
     logging.info(f'collision penalty: {env.collision_penalty}')
 
     # Initialize actor and critic models
@@ -86,9 +83,8 @@ def main():
         obs_space_dim,
         act_space_dim,
         hidden_layers=HIDDEN_LAYERS,
-    ).to(device)
 
-    logging.info(f"ppo model: \n {ppo_agent}")
+    ).to(device)
 
     # Create descriptive model name
     MODEL_NAME = f"ppo_model_Dstate_{obs_space_dim}_Dact_{act_space_dim}_S{SCENE_NAME}"
@@ -132,13 +128,13 @@ def main():
 
         # # # #  Collect experience with current policy  # # # #
         start_rollouts = time.time()
-        last_step = []
+       
         for rollout_step in range(NUM_ROLLOUTS):
             # Reset environment
             # NOTE: this can either be the same env or a new traffic scene
             # currently using the same scene for debugging purposes
             next_obs_dict = env.reset()
-            
+
             controlled_agents = [agent.getID() for agent in env.controlled_vehicles]
             num_agents = len(controlled_agents)
             dict_next_done = {agent_id: False for agent_id in controlled_agents}
@@ -270,7 +266,7 @@ def main():
                 wandb.log(
                     {
                         "global_step": global_step,
-                        "global_iter": iter,
+                        "global_iter": iter_,
                         "charts/num_agents_in_scene": num_agents,
                         "charts/total_episodic_return": current_ep_reward,
                         "charts/close_agent(3)_episodic_return": current_ep_rew_agents[3],
@@ -390,8 +386,6 @@ def main():
                 end = start + minibatch_size
                 mb_inds = b_inds[start:end]
 
-                actor_dist = ppo_agent.get_policy(b_obs[mb_inds])
-
                 # Check if the minibatch has at least two elements
                 if len(mb_inds) < 2:
                     continue  # Skip this minibatch and move to the next one
@@ -503,6 +497,7 @@ def main():
                 metadata=dict(meta_data_dict),
             )
             
+            # Save
             torch.save(
                 obj={
                     "iter": iter_,
@@ -511,7 +506,6 @@ def main():
                     "obs_space_dim": obs_space_dim,
                     "act_space_dim": act_space_dim,
                     "hidden_layers": HIDDEN_LAYERS,
-                    "iter": iter_,
                     "policy_loss": pg_loss,
                     "ep_reward": current_ep_reward,
                     "minibatch_size": minibatch_size,
@@ -519,12 +513,12 @@ def main():
                 f=model_path,
             )
 
-            # Save trained PPO agent as an artifact after 
+            # Save model artifact  
             model_artifact.add_file(local_path=model_path)
-            wandb.save(model_path)
+            wandb.save(model_path, base_path=wandb.run.dir)
             run.log_artifact(model_artifact)
 
-            logging.info(f"\n Stored {MODEL_ARTIFACT_NAME} after {iter_} iters.")
+            logging.info(f"Stored {MODEL_ARTIFACT_NAME} after {iter_} iters.")
 
     # # # #     End of run    # # # #
     env.close()
@@ -561,18 +555,27 @@ if __name__ == "__main__":
     with open(os.path.join(path_to_file, "valid_files.json")) as f:
         valid_veh_dict = json.load(f)
 
+    # Adapt action space #TODO
+    args_rl_env["accel_discretization"] = 3
+    args_rl_env["accel_lower_bound"] = 0
+    args_rl_env["accel_upper_bound"] = 2
+
+    args_rl_env["steering_discretization"] = 3
+    args_rl_env["steering_lower_bound"] = -1
+    args_rl_env["steering_upper_bound"] = 1
+
     # Define the search space
     sweep_configuration = {  
         'method': 'random',  
         'metric': {'goal': 'minimize', 'name': 'loss'},  
         'parameters': {  
-            'collision_penalty': { 'values': [20, 50, 80]}, 
-            'num_rollouts': { 'values': [80]},             
+            'collision_penalty': { 'values': [50]}, 
+            'num_rollouts': { 'values': [80, 90]},             
             'total_iters': {'values': [1000]},                
             'learning_rate': { 'values': [5e-5, 1e-4, 5e-4]},  
-            'ent_coef': { 'values': [0.0]},                   
-            'vf_coef': { 'values': [0.2, 0.4]},                    
-            'hidden_layers': {'values': [[4096, 2048, 1024, 512, 248, 128]]}, 
+            'ent_coef': { 'values': [0, 0.05]},                   
+            'vf_coef': { 'values': [0.005]},                    
+            'hidden_layers': {'values': [[4096, 2048, 1024, 512, 128]]}, 
         }  
     }
 
