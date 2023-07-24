@@ -382,7 +382,7 @@ def main():
             model_artifact = wandb.Artifact(
                 name=f"{MODEL_TYPE}_iter_{iter_}", 
                 type=MODEL_TYPE,
-                description=f"HR-PPO on scene: {SCENE_NAME}",
+                description=f"PPO on scene: {SCENE_NAME}",
                 metadata=dict(meta_data_dict),
             )
             
@@ -423,12 +423,12 @@ if __name__ == "__main__":
     RL_CONFIG_PATH = "/scratch/dc4971/nocturne/experiments/human_regularized/rl_config.yaml"
 
     # Names
-    SWEEP_NAME = "hr_ppo_experiments"
+    SWEEP_NAME = "ppo_experiments"
     MODEL_TYPE = "ppo_model"
     SCENE_NAME = "_intersection_2agents" # example_scenario
     MAX_AGENTS = 2 #TODO
     NUM_INDEP_RUNS = 1
-    SAVE_MODEL_FREQ = 50 # Save model every x iterations
+    SAVE_MODEL_FREQ = 100 # Save model every x iterations
 
 
     # Load RL config
@@ -454,7 +454,7 @@ if __name__ == "__main__":
         'metric': {'goal': 'minimize', 'name': 'loss'},  
         'parameters': {  
             'num_rollouts': { 'values': [80]},             
-            'total_iters': {'values': [100]},                
+            'total_iters': {'values': [2000]},                
             'learning_rate': { 'values': [5e-5, 1e-4]},  
             'ent_coef': { 'values': [0, 0.05]},                   
             'vf_coef': { 'values': [0.1, 0.005]},                    
