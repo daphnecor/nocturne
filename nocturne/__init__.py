@@ -23,9 +23,9 @@ __all__ = [
     "envs",
 ]
 
-import os
-from cfgs.config import PROCESSED_TRAIN_NO_TL, PROCESSED_VALID_NO_TL, PROJECT_PATH
+# import os
+# from cfgs.config import PROCESSED_TRAIN_NO_TL, PROCESSED_VALID_NO_TL, PROJECT_PATH
 
-os.environ["PROCESSED_TRAIN_NO_TL"] = str(PROCESSED_TRAIN_NO_TL)
-os.environ["PROCESSED_VALID_NO_TL"] = str(PROCESSED_VALID_NO_TL)
-os.environ["NOCTURNE_LOG_DIR"] = str(os.path.join(PROJECT_PATH, 'logs'))
+# os.environ["PROCESSED_TRAIN_NO_TL"] = str(PROCESSED_TRAIN_NO_TL)
+# os.environ["PROCESSED_VALID_NO_TL"] = str(PROCESSED_VALID_NO_TL)
+# os.environ["NOCTURNE_LOG_DIR"] = str(os.path.join(PROJECT_PATH, 'logs'))
