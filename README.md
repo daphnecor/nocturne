@@ -126,13 +126,24 @@ git submodule sync
 git submodule update --init --recursive
 ```
 
+You also need to have SFML installed, which you can do by running:
+```shell
+brew install sfml 
+```
+on a mac or 
+```shell
+sudo apt-get install libsfml-dev
+```
+on Linux.
+
 Now install the package by running:
 
 ```shell
 poetry install
 ```
+> _Note:_ If it fails to build `nocturne`, try running `poetry build` to obtain a more descriptive error message.
 
-> _Note:_ Under the hood the `nocturne` package uses the `nocturne_cpp` Python package that wraps the Nocturne C++ code base and provides bindings for Python to interact with the C++ code using `pybind11`.
+> Under the hood the `nocturne` package uses the `nocturne_cpp` Python package that wraps the Nocturne C++ code base and provides bindings for Python to interact with the C++ code using `pybind11`.
 
 
 ### Development setup
